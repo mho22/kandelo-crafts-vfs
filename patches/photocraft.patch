@@ -1,0 +1,2325 @@
+# photocraft 0.3.0: target_arch = "wasm32" means the browser build
+# (apps/photocraft-web) here; Kandelo takes the native paths (files
+# opened by path, rayon threads, rfd, arboard, open). Every such cfg reads
+# all(target_arch = "wasm32", not(target_os = "kandelo")). Kandelo has no
+# X server, so the app asks eframe for Wayland only there.
+diff -ruN a/apps/photocraft/Cargo.toml b/apps/photocraft/Cargo.toml
+--- a/apps/photocraft/Cargo.toml	2026-10-08 18:09:51
++++ b/apps/photocraft/Cargo.toml	2026-10-08 18:09:51
+@@ -24,15 +24,19 @@
+ photocraft-ui-egui = { workspace = true }
+ # Pen tablet pressure/tilt on macOS and X11 (the workspace's one isolated unsafe helper crate).
+ photocraft-tablet = { workspace = true }
+-eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
++eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland"] }
+ egui = { workspace = true }
+ serde_json = { workspace = true }
+ log = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rfd = { workspace = true }
+ arboard = { version = "3.6", features = ["wayland-data-control"] }
+ open = "5"
++
++# Kandelo has no X server: Wayland only.
++[target.'cfg(not(target_os = "kandelo"))'.dependencies]
++eframe = { workspace = true, features = ["x11"] }
+ 
+ [target.'cfg(target_os = "macos")'.dependencies]
+ # Finder double-click / Open With / Dock drops arrive as Apple events; this small audited crate
+diff -ruN a/crates/algo/Cargo.toml b/crates/algo/Cargo.toml
+--- a/crates/algo/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/algo/Cargo.toml	2026-10-08 18:09:51
+@@ -16,7 +16,7 @@
+ serde = { workspace = true }
+ 
+ # Parallel tiles on native; wasm builds stay single-threaded.
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+ 
+ [dev-dependencies]
+diff -ruN a/crates/algo/src/blur.rs b/crates/algo/src/blur.rs
+--- a/crates/algo/src/blur.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/blur.rs	2026-10-08 18:09:51
+@@ -136,12 +136,12 @@
+             }
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         buf.par_chunks_mut(w * n).for_each(blur_row);
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     buf.chunks_mut(w * n).for_each(blur_row);
+ }
+ 
+@@ -163,12 +163,12 @@
+             }
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         out.par_chunks_mut(B * h * n).enumerate().for_each(band);
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     out.chunks_mut(B * h * n).enumerate().for_each(band);
+     out
+ }
+@@ -189,12 +189,12 @@
+             }
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         p.par_chunks_mut(ww * n).enumerate().for_each(|(y, row)| fill(y, row));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     p.chunks_mut(ww * n).enumerate().for_each(|(y, row)| fill(y, row));
+     premultiply(&mut p, n, alpha);
+     for w in &boxes {
+diff -ruN a/crates/algo/src/erase.rs b/crates/algo/src/erase.rs
+--- a/crates/algo/src/erase.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/erase.rs	2026-10-08 18:09:51
+@@ -78,12 +78,12 @@
+         }
+         Some((r, bytes))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let done: Vec<(Rect, Vec<u8>)> = {
+         use rayon::prelude::*;
+         rects.into_par_iter().filter_map(work).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let done: Vec<(Rect, Vec<u8>)> = rects.into_iter().filter_map(work).collect();
+     let mut dmg = Rect::EMPTY;
+     for (r, bytes) in done {
+diff -ruN a/crates/algo/src/inpaint.rs b/crates/algo/src/inpaint.rs
+--- a/crates/algo/src/inpaint.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/inpaint.rs	2026-10-08 18:09:51
+@@ -21,7 +21,7 @@
+ use crate::poisson::membrane_fill;
+ 
+ /// Below this many grid cells a level runs single-threaded (thread hand-off costs more than it saves).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const PAR_MIN: usize = 128 * 128;
+ 
+ /// SplitMix64: tiny deterministic RNG.
+@@ -271,7 +271,7 @@
+                 }
+             }
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if w * self.h >= PAR_MIN {
+             use rayon::prelude::*;
+             nnf.par_chunks_mut(BAND * w).zip(cost.par_chunks_mut(BAND * w)).enumerate().for_each(|(bi, (nn, co))| band_fn(bi, nn, co));
+@@ -337,14 +337,14 @@
+             }
+             out
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let rows: Vec<Vec<(usize, Vec<f32>)>> = if w * h >= PAR_MIN {
+             use rayon::prelude::*;
+             (0..h).into_par_iter().map(row).collect()
+         } else {
+             (0..h).map(row).collect()
+         };
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let rows: Vec<Vec<(usize, Vec<f32>)>> = (0..h).map(row).collect();
+         for (y, r) in rows.into_iter().enumerate() {
+             for (x, v) in r {
+diff -ruN a/crates/algo/src/lib.rs b/crates/algo/src/lib.rs
+--- a/crates/algo/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/lib.rs	2026-10-08 18:09:51
+@@ -982,9 +982,9 @@
+     // Tiles are filtered in groups of about RESULT_BUDGET bytes (at least one per core) and each
+     // group is written before the next starts, so a huge layer never holds all its results as
+     // floats at once.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let threads = rayon::current_num_threads();
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let threads = 1;
+     let per_tile = (tile.max(1) as usize).pow(2) * fmt.channels() * std::mem::size_of::<f32>();
+     let group = (RESULT_BUDGET / per_tile.max(1)).max(threads).max(1);
+@@ -992,12 +992,12 @@
+         if ctl.cancelled() {
+             return None;
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let results: Vec<(Rect, Vec<f32>)> = {
+             use rayon::prelude::*;
+             chunk.par_iter().map(run).collect()
+         };
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let results: Vec<(Rect, Vec<f32>)> = chunk.iter().map(run).collect();
+         if ctl.cancelled() {
+             return None;
+diff -ruN a/crates/algo/src/liquify.rs b/crates/algo/src/liquify.rs
+--- a/crates/algo/src/liquify.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/liquify.rs	2026-10-08 18:09:51
+@@ -615,12 +615,12 @@
+         }
+         Some((*t, outp))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let done: Vec<(Rect, Vec<f32>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().filter_map(work).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let done: Vec<(Rect, Vec<f32>)> = tiles.iter().filter_map(work).collect();
+     for (r, v) in done {
+         out.write_region(r, &v);
+@@ -678,12 +678,12 @@
+                 }
+             }
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             use rayon::prelude::*;
+             px.par_chunks_mut(w).enumerate().for_each(|(y, row)| fill_rows(y, row));
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         px.chunks_mut(w).enumerate().for_each(|(y, row)| fill_rows(y, row));
+         ProxyImage { bounds, scale, w, h, px }
+     }
+@@ -715,7 +715,7 @@
+         };
+         let rows = &mut out[y0 * self.w..y1 * self.w];
+         // A dab's few thousand pixels are faster on this thread than waking the pool.
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if (x1 - x0) * (y1 - y0) > 150_000 {
+             use rayon::prelude::*;
+             rows.par_chunks_mut(self.w).enumerate().for_each(|(i, line)| row(y0 + i, line));
+diff -ruN a/crates/algo/src/matting.rs b/crates/algo/src/matting.rs
+--- a/crates/algo/src/matting.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/matting.rs	2026-10-08 18:09:51
+@@ -408,12 +408,12 @@
+         let out = refine_buffer(img.as_ref(), &m, rw, rh, p);
+         (*t, core(&out))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let results: Vec<(Rect, Vec<u8>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().map(run).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let results: Vec<(Rect, Vec<u8>)> = tiles.iter().map(run).collect();
+     let bw = bbox.width() as usize;
+     let mut out = vec![0u8; bw * bbox.height() as usize];
+@@ -467,12 +467,12 @@
+ }
+ 
+ fn par_tiles<T: Send>(tiles: &[Rect], f: impl Fn(&Rect) -> Option<T> + Sync + Send) -> Vec<T> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         tiles.par_iter().filter_map(f).collect()
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         tiles.iter().filter_map(f).collect()
+     }
+diff -ruN a/crates/algo/src/paint.rs b/crates/algo/src/paint.rs
+--- a/crates/algo/src/paint.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/paint.rs	2026-10-08 18:09:51
+@@ -98,12 +98,12 @@
+         }
+         any.then_some((*r, region))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let done: Vec<(Rect, Vec<f32>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().filter_map(work).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let done: Vec<(Rect, Vec<f32>)> = tiles.iter().filter_map(work).collect();
+     for (r, region) in done {
+         s.write_region(r, &region);
+diff -ruN a/crates/algo/src/photo_util.rs b/crates/algo/src/photo_util.rs
+--- a/crates/algo/src/photo_util.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/photo_util.rs	2026-10-08 18:09:51
+@@ -127,35 +127,35 @@
+ /// Runs `f(y, row)` for every row of a `w × h × ch` buffer, in parallel on native targets.
+ pub(crate) fn par_rows<T: Send + Sync>(buf: &mut [T], w: usize, ch: usize, f: impl Fn(usize, &mut [T]) + Sync + Send) {
+     let stride = (w * ch).max(1);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         buf.par_chunks_mut(stride).enumerate().for_each(|(y, row)| f(y, row));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     buf.chunks_mut(stride).enumerate().for_each(|(y, row)| f(y, row));
+ }
+ 
+ /// Like [`par_rows`] but over two row-aligned buffers in lockstep (e.g. index + pixels).
+ pub(crate) fn par_rows2<A: Send, B: Send>(a: &mut [A], b: &mut [B], w: usize, f: impl Fn(usize, &mut [A], &mut [B]) + Sync + Send) {
+     let s = w.max(1);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         a.par_chunks_mut(s).zip(b.par_chunks_mut(s)).enumerate().for_each(|(y, (ar, br))| f(y, ar, br));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     a.chunks_mut(s).zip(b.chunks_mut(s)).enumerate().for_each(|(y, (ar, br))| f(y, ar, br));
+ }
+ 
+ /// Maps `f` over `0..n` (in parallel on native targets), keeping order.
+ pub(crate) fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         (0..n).into_par_iter().map(f).collect()
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     (0..n).map(f).collect()
+ }
+ 
+diff -ruN a/crates/algo/src/poisson.rs b/crates/algo/src/poisson.rs
+--- a/crates/algo/src/poisson.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/poisson.rs	2026-10-08 18:09:51
+@@ -190,14 +190,14 @@
+ 
+ /// Map `f` over the channels of an interleaved buffer as planar slices (parallel on native).
+ fn per_channel(w: usize, h: usize, ch: usize, f: impl Fn(usize) -> Vec<f32> + Sync + Send) -> Vec<f32> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let planes: Vec<Vec<f32>> = if w * h >= 64 * 64 {
+         use rayon::prelude::*;
+         (0..ch).into_par_iter().map(&f).collect()
+     } else {
+         (0..ch).map(&f).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let planes: Vec<Vec<f32>> = (0..ch).map(&f).collect();
+     let mut out = vec![0.0f32; w * h * ch];
+     for (c, p) in planes.iter().enumerate() {
+diff -ruN a/crates/algo/src/puppet.rs b/crates/algo/src/puppet.rs
+--- a/crates/algo/src/puppet.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/puppet.rs	2026-10-08 18:09:51
+@@ -166,12 +166,12 @@
+                 }
+             }
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             use rayon::prelude::*;
+             cov.par_chunks_mut(bw).enumerate().for_each(|(by, out)| scan(by, out));
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         cov.chunks_mut(bw).enumerate().for_each(|(by, out)| scan(by, out));
+     }
+     // Grow / shrink by the expansion (round stamp in block units).
+diff -ruN a/crates/algo/src/render2.rs b/crates/algo/src/render2.rs
+--- a/crates/algo/src/render2.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/render2.rs	2026-10-08 18:09:51
+@@ -252,12 +252,12 @@
+         }
+         (*t, data)
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let results: Vec<(Rect, Vec<f32>)> = {
+         use rayon::prelude::*;
+         jobs.par_iter().map(run).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let results: Vec<(Rect, Vec<f32>)> = jobs.iter().map(run).collect();
+     for (t, data) in results {
+         surface.write_region(t, &data);
+diff -ruN a/crates/algo/src/resample.rs b/crates/algo/src/resample.rs
+--- a/crates/algo/src/resample.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/resample.rs	2026-10-08 18:09:51
+@@ -165,12 +165,12 @@
+         unpremultiply(&mut res, n, alpha);
+         (Rect::new(dst.x0, dst.y0 + b0 as i32, dst.x1, dst.y0 + b1 as i32), res)
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let parts: Vec<(Rect, Vec<f32>)> = {
+         use rayon::prelude::*;
+         bands.par_iter().map(run).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let parts: Vec<(Rect, Vec<f32>)> = bands.iter().map(run).collect();
+     for (r, d) in parts {
+         out.write_region(r, &d);
+diff -ruN a/crates/algo/src/seam.rs b/crates/algo/src/seam.rs
+--- a/crates/algo/src/seam.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/seam.rs	2026-10-08 18:09:51
+@@ -29,12 +29,12 @@
+             *v = energy_at(img, w, w, h, ch, x, y);
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         e.par_chunks_mut(w).enumerate().for_each(row);
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     e.chunks_mut(w).enumerate().for_each(row);
+     e
+ }
+@@ -191,12 +191,12 @@
+                 e[x] = v;
+             }
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             use rayon::prelude::*;
+             self.e.par_chunks_mut(stride).enumerate().for_each(row);
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         self.e.chunks_mut(stride).enumerate().for_each(row);
+     }
+ 
+@@ -214,12 +214,12 @@
+ /// are in use, by shifting the rest of the row left.
+ fn shift_rows<T: Copy + Send>(buf: &mut [T], row_len: usize, seam: &[usize], n: usize, cw: usize) {
+     let shift = |(r, &x): (&mut [T], &usize)| r.copy_within((x + 1) * n..cw * n, x * n);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         buf.par_chunks_mut(row_len).zip(seam.par_iter()).for_each(shift);
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     buf.chunks_mut(row_len).zip(seam).for_each(shift);
+ }
+ 
+diff -ruN a/crates/algo/src/segment/focus.rs b/crates/algo/src/segment/focus.rs
+--- a/crates/algo/src/segment/focus.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/segment/focus.rs	2026-10-08 18:09:51
+@@ -75,12 +75,12 @@
+             *px = (((v - 0.5) * 3.0 + 0.5).clamp(0.0, 1.0) * 255.0).round() as u8;
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         out.par_chunks_mut(fw).enumerate().for_each(|(y, o)| row(y, o));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     out.chunks_mut(fw).enumerate().for_each(|(y, o)| row(y, o));
+     super::trim_region(Region { bbox: canvas, mask: out })
+ }
+diff -ruN a/crates/algo/src/segment/mod.rs b/crates/algo/src/segment/mod.rs
+--- a/crates/algo/src/segment/mod.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/segment/mod.rs	2026-10-08 18:09:51
+@@ -134,12 +134,12 @@
+             let strip = self.rgb(Rect::new(r.x0, y0, r.x1, y1));
+             strip.downsample(step).px
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let parts: Vec<Vec<[f32; 3]>> = {
+             use rayon::prelude::*;
+             strips.par_iter().map(run).collect()
+         };
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let parts: Vec<Vec<[f32; 3]>> = strips.iter().map(run).collect();
+         let mut px = Vec::with_capacity(ow * oh);
+         for p in parts {
+@@ -295,12 +295,12 @@
+ /// Data costs `(−ln p(z|fg), −ln p(z|bg))` for every pixel.
+ pub fn data_costs(img: &RgbImage, fg: &Gmm, bg: &Gmm) -> (Vec<f32>, Vec<f32>) {
+     let eval = |p: &[f32; 3]| (fg.neg_log(*p), bg.neg_log(*p));
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let v: Vec<(f32, f32)> = {
+         use rayon::prelude::*;
+         img.px.par_iter().map(eval).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let v: Vec<(f32, f32)> = img.px.iter().map(eval).collect();
+     v.into_iter().unzip()
+ }
+@@ -433,12 +433,12 @@
+             }
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         mask.par_chunks_mut(w).enumerate().for_each(|(y, r)| row(y, r));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     mask.chunks_mut(w).enumerate().for_each(|(y, r)| row(y, r));
+ }
+ 
+@@ -508,12 +508,12 @@
+                 *o = if low[ly * lw + (x / step).min(lw - 1)] { 255 } else { 0 };
+             }
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             use rayon::prelude::*;
+             mask.par_chunks_mut(w).enumerate().for_each(|(y, r)| fill(y, r));
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         mask.chunks_mut(w).enumerate().for_each(|(y, r)| fill(y, r));
+         if let Some((fg, bg)) = models {
+             refine_band(sampler, window, step, low, &band, lw, lh, fg, bg, &mut mask);
+@@ -579,12 +579,12 @@
+         }
+         (*t, core)
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let results: Vec<(Rect, Vec<bool>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().map(run).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let results: Vec<(Rect, Vec<bool>)> = tiles.iter().map(run).collect();
+     for (t, core) in results {
+         let cw = t.width() as usize;
+diff -ruN a/crates/algo/src/segment/quick.rs b/crates/algo/src/segment/quick.rs
+--- a/crates/algo/src/segment/quick.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/segment/quick.rs	2026-10-08 18:09:51
+@@ -91,12 +91,12 @@
+         };
+         (cf, cb)
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let costs: Vec<(f32, f32)> = {
+         use rayon::prelude::*;
+         img.px.par_iter().zip(geo.par_iter()).map(eval).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let costs: Vec<(f32, f32)> = img.px.iter().zip(geo.iter()).map(eval).collect();
+     let (cf, cb): (Vec<f32>, Vec<f32>) = costs.into_iter().unzip();
+     let fixed: Vec<u8> = seeds.iter().map(|s| if *s { HARD_FG } else { FREE }).collect();
+diff -ruN a/crates/algo/src/segment/sky.rs b/crates/algo/src/segment/sky.rs
+--- a/crates/algo/src/segment/sky.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/segment/sky.rs	2026-10-08 18:09:51
+@@ -197,12 +197,12 @@
+         let q = guided_filter_gray(&guide, &pm, ww, wh, r, eps);
+         (*t, crop(&q))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let parts: Vec<(Rect, Vec<u8>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().map(run).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let parts: Vec<(Rect, Vec<u8>)> = tiles.iter().map(run).collect();
+     let mut mask = vec![0u8; w * h];
+     for (t, v) in parts {
+diff -ruN a/crates/algo/src/selection.rs b/crates/algo/src/selection.rs
+--- a/crates/algo/src/selection.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/selection.rs	2026-10-08 18:09:51
+@@ -214,12 +214,12 @@
+         let y0 = area.y0 + (bi * band) as i32;
+         s.read_rgba8_into(Rect::new(area.x0, y0, area.x1, y0 + (chunk.len() / w) as i32), chunk);
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         img.par_chunks_mut(w * band).enumerate().for_each(|(bi, c)| read(bi, c));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     img.chunks_mut(w * band).enumerate().for_each(|(bi, c)| read(bi, c));
+     img
+ }
+@@ -298,12 +298,12 @@
+             }
+             span
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let spans: Vec<Option<(usize, usize)>> = {
+             use rayon::prelude::*;
+             marks.par_chunks_mut(w).enumerate().map(|(y, row)| scan(y, row)).collect()
+         };
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let spans: Vec<Option<(usize, usize)>> = marks.chunks_mut(w).enumerate().map(|(y, row)| scan(y, row)).collect();
+         for (y, sp) in spans.iter().enumerate() {
+             if let Some((a, b)) = sp {
+@@ -349,12 +349,12 @@
+             }
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         mask.par_chunks_mut(bw).enumerate().for_each(|(yy, row)| fill_row(yy, row));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     mask.chunks_mut(bw).enumerate().for_each(|(yy, row)| fill_row(yy, row));
+     let bbox = Rect::new(area.x0 + x0 as i32, area.y0 + y0 as i32, area.x0 + x1 as i32, area.y0 + y1 as i32);
+     Some(Region { bbox, mask })
+diff -ruN a/crates/algo/src/transform.rs b/crates/algo/src/transform.rs
+--- a/crates/algo/src/transform.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/transform.rs	2026-10-08 18:09:51
+@@ -254,12 +254,12 @@
+         }
+         any.then_some((*t, outp))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let done: Vec<(Rect, Vec<f32>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().filter_map(work).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let done: Vec<(Rect, Vec<f32>)> = tiles.iter().filter_map(work).collect();
+     for (r, v) in done {
+         out.write_region(r, &v);
+diff -ruN a/crates/algo/src/warp.rs b/crates/algo/src/warp.rs
+--- a/crates/algo/src/warp.rs	2026-10-08 18:09:51
++++ b/crates/algo/src/warp.rs	2026-10-08 18:09:51
+@@ -281,12 +281,12 @@
+         }
+         any.then_some((*t, outp))
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let done: Vec<(Rect, Vec<f32>)> = {
+         use rayon::prelude::*;
+         tiles.par_iter().zip(bins.par_iter()).filter_map(work).collect()
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let done: Vec<(Rect, Vec<f32>)> = tiles.iter().zip(bins.iter()).filter_map(work).collect();
+     for (r, v) in done {
+         out.write_region(r, &v);
+diff -ruN a/crates/cms/Cargo.toml b/crates/cms/Cargo.toml
+--- a/crates/cms/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/cms/Cargo.toml	2026-10-08 18:09:51
+@@ -11,7 +11,7 @@
+ 
+ [dependencies]
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+ 
+ [dev-dependencies]
+diff -ruN a/crates/cms/src/synth.rs b/crates/cms/src/synth.rs
+--- a/crates/cms/src/synth.rs	2026-10-08 18:09:51
++++ b/crates/cms/src/synth.rs	2026-10-08 18:09:51
+@@ -362,13 +362,13 @@
+     ]
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+     use rayon::prelude::*;
+     (0..n).into_par_iter().map(f).collect()
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+     (0..n).map(f).collect()
+ }
+diff -ruN a/crates/cms/src/transform.rs b/crates/cms/src/transform.rs
+--- a/crates/cms/src/transform.rs	2026-10-08 18:09:51
++++ b/crates/cms/src/transform.rs	2026-10-08 18:09:51
+@@ -445,12 +445,12 @@
+                 }
+             }
+         };
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             use rayon::prelude::*;
+             jobs.into_par_iter().for_each(run);
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         jobs.into_iter().for_each(run);
+     }
+ 
+@@ -513,7 +513,7 @@
+ const PAR_MIN_PIXELS: usize = 16 * 1024;
+ const PAR_CHUNK_PIXELS: usize = 8 * 1024;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn par_rows<S: Sync, D: Send>(src: &[S], ss: usize, dst: &mut [D], ds: usize, f: impl Fn(&[S], &mut [D]) + Sync) {
+     use rayon::prelude::*;
+     let n = (src.len() / ss).min(dst.len() / ds);
+@@ -524,13 +524,13 @@
+     src.par_chunks(PAR_CHUNK_PIXELS * ss).zip(dst.par_chunks_mut(PAR_CHUNK_PIXELS * ds)).for_each(|(s, d)| f(s, d));
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn par_rows<S: Sync, D: Send>(src: &[S], ss: usize, dst: &mut [D], ds: usize, f: impl Fn(&[S], &mut [D]) + Sync) {
+     let n = (src.len() / ss).min(dst.len() / ds);
+     f(&src[..n * ss], &mut dst[..n * ds]);
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn par_inplace(buf: &mut [f32], stride: usize, f: impl Fn(&mut [f32]) + Sync) {
+     use rayon::prelude::*;
+     if buf.len() / stride < PAR_MIN_PIXELS {
+@@ -539,7 +539,7 @@
+     buf.par_chunks_mut(PAR_CHUNK_PIXELS * stride).for_each(&f);
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn par_inplace(buf: &mut [f32], _stride: usize, f: impl Fn(&mut [f32]) + Sync) {
+     f(buf)
+ }
+diff -ruN a/crates/codecs/Cargo.toml b/crates/codecs/Cargo.toml
+--- a/crates/codecs/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/codecs/Cargo.toml	2026-10-08 18:09:51
+@@ -28,7 +28,7 @@
+ jpeg-encoder = "0.6"
+ 
+ # Orientation is applied a band of rows per task on native; wasm stays single-threaded.
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon.workspace = true
+ 
+ [dev-dependencies]
+diff -ruN a/crates/codecs/src/codecs/png.rs b/crates/codecs/src/codecs/png.rs
+--- a/crates/codecs/src/codecs/png.rs	2026-10-08 18:09:51
++++ b/crates/codecs/src/codecs/png.rs	2026-10-08 18:09:51
+@@ -231,7 +231,7 @@
+ /// A 36 MP RGB export drops from ~9 s to well under a second on 12 cores; the output is a few
+ /// percent larger (no dictionary across bands).
+ fn parallel_idat(data: &[u8], w: usize, h: usize, bpp: usize, level: PngCompression) -> Option<Vec<u8>> {
+-    if cfg!(target_arch = "wasm32") || data.len() < PARALLEL_MIN_BYTES || level == PngCompression::None || w == 0 || h == 0 {
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) || data.len() < PARALLEL_MIN_BYTES || level == PngCompression::None || w == 0 || h == 0 {
+         return None;
+     }
+     let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 32);
+diff -ruN a/crates/codecs/src/orientation.rs b/crates/codecs/src/orientation.rs
+--- a/crates/codecs/src/orientation.rs	2026-10-08 18:09:51
++++ b/crates/codecs/src/orientation.rs	2026-10-08 18:09:51
+@@ -252,12 +252,12 @@
+     let (s, _) = src.as_chunks::<N>();
+     let (d, _) = out.as_chunks_mut::<N>();
+     let per = (BAND * ow).max(1);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         d.par_chunks_mut(per).enumerate().for_each(|(b, chunk)| band(s, chunk, o, (w, h), ow, b * BAND));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     for (b, chunk) in d.chunks_mut(per).enumerate() {
+         band(s, chunk, o, (w, h), ow, b * BAND);
+     }
+diff -ruN a/crates/compose/Cargo.toml b/crates/compose/Cargo.toml
+--- a/crates/compose/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/compose/Cargo.toml	2026-10-08 18:09:51
+@@ -14,7 +14,7 @@
+ photocraft-doc = { workspace = true }
+ photocraft-vector = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+ 
+ [dev-dependencies]
+diff -ruN a/crates/compose/src/effects.rs b/crates/compose/src/effects.rs
+--- a/crates/compose/src/effects.rs	2026-10-08 18:09:51
++++ b/crates/compose/src/effects.rs	2026-10-08 18:09:51
+@@ -732,7 +732,7 @@
+         return;
+     }
+     let threads =
+-        if cfg!(target_arch = "wasm32") || src.len() < 1 << 16 { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 16) };
++        if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) || src.len() < 1 << 16 { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 16) };
+     if threads == 1 {
+         dst.chunks_mut(w).zip(src.chunks(w)).for_each(|(d, s)| f(s, d));
+         return;
+diff -ruN a/crates/compose/src/gradient_fill.rs b/crates/compose/src/gradient_fill.rs
+--- a/crates/compose/src/gradient_fill.rs	2026-10-08 18:09:51
++++ b/crates/compose/src/gradient_fill.rs	2026-10-08 18:09:51
+@@ -123,12 +123,12 @@
+             }
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         px.par_chunks_mut(w).enumerate().for_each(|(j, out)| row(rect.y0 + j as i32, out));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     for (j, out) in px.chunks_mut(w).enumerate() {
+         row(rect.y0 + j as i32, out);
+     }
+diff -ruN a/crates/compose/src/lib.rs b/crates/compose/src/lib.rs
+--- a/crates/compose/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/compose/src/lib.rs	2026-10-08 18:09:51
+@@ -150,7 +150,7 @@
+         }
+     };
+     let band_len = w * tile as usize;
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         let bands = rect.height().div_ceil(tile as u32) as usize;
+@@ -173,7 +173,7 @@
+             }
+         }
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     for (i, band) in out.px.chunks_mut(band_len).enumerate() {
+         let y0 = rect.y0 + i as i32 * tile;
+         for t in band_tiles(y0) {
+@@ -381,12 +381,12 @@
+             }
+         };
+         let part = &mut acc[(t0 - oy0) * ow..(t1 - oy0) * ow];
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             use rayon::prelude::*;
+             part.par_chunks_mut(ow).enumerate().for_each(|(i, out)| sum_row(t0 + i, out));
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         for (i, out) in part.chunks_mut(ow).enumerate() {
+             sum_row(t0 + i, out);
+         }
+@@ -472,7 +472,7 @@
+             let _ = effect_maps(l, cx);
+         });
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if todo.len() > 1 {
+         use rayon::prelude::*;
+         todo.par_iter().for_each(build);
+diff -ruN a/crates/compose/src/tests.rs b/crates/compose/src/tests.rs
+--- a/crates/compose/src/tests.rs	2026-10-08 18:09:51
++++ b/crates/compose/src/tests.rs	2026-10-08 18:09:51
+@@ -1366,7 +1366,7 @@
+ 
+ /// Layers whose effect maps are built with nested Rayon work (a gradient fill's rows render in
+ /// parallel), each carrying a different effect.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn nested_parallel_fx_doc() -> Document {
+     use photocraft_doc::{Contour, Effect, FxCommon, FxPaint, Glow, GlowSource, GlowTechnique, StrokeFx, StrokePosition};
+     let mut d = doc_white(512, 512);
+@@ -1405,7 +1405,7 @@
+ }
+ 
+ #[test]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn effect_maps_with_nested_rayon_work_do_not_deadlock() {
+     // #276: a tile building a layer's effect maps inside a once-init ran Rayon work; waiting on
+     // it, its worker stole another tile of the same layer, which then blocked on the init held
+diff -ruN a/crates/engine/src/adjust_cmds.rs b/crates/engine/src/adjust_cmds.rs
+--- a/crates/engine/src/adjust_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/adjust_cmds.rs	2026-10-08 18:09:51
+@@ -120,11 +120,11 @@
+     path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn read_file(path: &str) -> Option<Vec<u8>> {
+     std::fs::read(path).ok()
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn read_file(_: &str) -> Option<Vec<u8>> {
+     None
+ }
+diff -ruN a/crates/engine/src/analysis_cmds/tests.rs b/crates/engine/src/analysis_cmds/tests.rs
+--- a/crates/engine/src/analysis_cmds/tests.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/analysis_cmds/tests.rs	2026-10-08 18:09:51
+@@ -229,7 +229,7 @@
+     assert!(header.contains("Length") && header.contains("Gray Value (Mean)"));
+     assert!(lines.next().unwrap().starts_with("Measurement 1,t,"));
+     assert!(lines.next().unwrap().contains(",5.0,"), "{csv}");
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let path = std::env::temp_dir().join(format!("pc-log-{}.csv", std::process::id()));
+         let r = s.execute("measurementLog.export", json!({"path": path.to_str().unwrap(), "rows": [2]})).unwrap();
+diff -ruN a/crates/engine/src/analysis_cmds.rs b/crates/engine/src/analysis_cmds.rs
+--- a/crates/engine/src/analysis_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/analysis_cmds.rs	2026-10-08 18:09:51
+@@ -196,7 +196,7 @@
+ 
+ /// Current time as ISO 8601 UTC (`2026-10-01T12:34:56Z`); empty on the web (no clock).
+ pub fn now_iso() -> String {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+         let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+@@ -212,7 +212,7 @@
+         let y = yoe + era * 400 + i64::from(m <= 2);
+         format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         String::new()
+     }
+diff -ruN a/crates/engine/src/automate_cmds.rs b/crates/engine/src/automate_cmds.rs
+--- a/crates/engine/src/automate_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/automate_cmds.rs	2026-10-08 18:09:51
+@@ -305,7 +305,7 @@
+ }
+ 
+ /// A tiny shell script next to the droplet: drop files on it (or pass them) to run the droplet.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn write_shim(droplet: &str) -> Result<String> {
+     let abs = std::fs::canonicalize(droplet).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| droplet.to_string());
+     let base = abs.trim_end_matches(".pcdroplet").trim_end_matches(".json");
+@@ -322,7 +322,7 @@
+     }
+     Ok(shim)
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn write_shim(_: &str) -> Result<String> {
+     Err(EngineError::Other("no file system on the web".into()))
+ }
+diff -ruN a/crates/engine/src/distort_cmds/tests.rs b/crates/engine/src/distort_cmds/tests.rs
+--- a/crates/engine/src/distort_cmds/tests.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/distort_cmds/tests.rs	2026-10-08 18:09:51
+@@ -98,7 +98,7 @@
+     assert_eq!(r["changed"], true);
+     let ms = r["ms"].as_f64().unwrap();
+     assert!(ms.is_finite() && ms >= 0.0);
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     assert_eq!(ms, 0.0, "the web build uses the wasm-safe stopwatch fallback");
+ }
+ 
+diff -ruN a/crates/engine/src/file_cmds.rs b/crates/engine/src/file_cmds.rs
+--- a/crates/engine/src/file_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/file_cmds.rs	2026-10-08 18:09:51
+@@ -28,7 +28,7 @@
+ 
+ /// The file system is reachable (not on the web).
+ pub(crate) fn native(_: &Session) -> std::result::Result<(), String> {
+-    if cfg!(target_arch = "wasm32") { Err("not available on the web (no file system)".into()) } else { Ok(()) }
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { Err("not available on the web (no file system)".into()) } else { Ok(()) }
+ }
+ 
+ pub(crate) fn native_doc(s: &Session) -> std::result::Result<(), String> {
+@@ -65,39 +65,39 @@
+ 
+ // ---------- file system (native only) ----------
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn is_file(path: &str) -> bool {
+     std::path::Path::new(path).is_file()
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn is_file(_path: &str) -> bool {
+     false
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ /// Every file the engine opens is read here: in bounded reads, with a clear error when it does
+ /// not fit in memory (see [`photocraft_format::read`]).
+ pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
+     photocraft_format::read_file(std::path::Path::new(path)).map_err(|e| EngineError::Other(format!("{path}: {e}")))
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
+     Err(EngineError::Other(format!("cannot read {path}: no file system on the web")))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ /// Every file the engine writes goes through here: crash-safe (temp file + fsync + rename, see
+ /// [`photocraft_format::atomic`]), so a failed save never destroys the previous file.
+ pub(crate) fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
+     photocraft_format::atomic_write(std::path::Path::new(path), bytes).map_err(|e| EngineError::Other(e.to_string()))
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn write_file(path: &str, _bytes: &[u8]) -> Result<()> {
+     Err(EngineError::Other(format!("cannot write {path}: no file system on the web")))
+ }
+ 
+ /// Files of a folder that look like images we can open, sorted by name.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn list_images(dir: &str) -> Result<Vec<String>> {
+     let rd = std::fs::read_dir(dir).map_err(|e| EngineError::Other(format!("{dir}: {e}")))?;
+     let mut out: Vec<String> = rd
+@@ -109,7 +109,7 @@
+     out.sort();
+     Ok(out)
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn list_images(dir: &str) -> Result<Vec<String>> {
+     Err(EngineError::Other(format!("cannot list {dir}: no file system on the web")))
+ }
+diff -ruN a/crates/engine/src/jobs.rs b/crates/engine/src/jobs.rs
+--- a/crates/engine/src/jobs.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/jobs.rs	2026-10-08 18:09:51
+@@ -158,12 +158,12 @@
+ /// Wall-clock milliseconds since some fixed point (0 on wasm, where `Instant` is unavailable and
+ /// jobs run inline anyway).
+ fn now_ms() -> f64 {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+         START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         0.0
+     }
+@@ -184,7 +184,7 @@
+     color_restrict: Option<usize>,
+     rx: std::sync::mpsc::Receiver<Result<Payload>>,
+     apply: Option<Apply>,
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     handle: Option<std::thread::JoinHandle<()>>,
+ }
+ 
+@@ -219,7 +219,7 @@
+     /// The last few ended jobs, for `jobs.list`.
+     recent: Vec<JobInfo>,
+     /// Workers of cancelled jobs that may still be unwinding (native).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     draining: Vec<std::thread::JoinHandle<()>>,
+ }
+ 
+@@ -256,13 +256,13 @@
+     PREFIXES.iter().any(|p| id.starts_with(p)) || IDS.contains(&id)
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn read_path(path: &str) -> Result<Vec<u8>> {
+     // Bounded reads, and a clear error for a file larger than memory (#375).
+     photocraft_format::read_file(std::path::Path::new(path)).map_err(|e| EngineError::Other(format!("{path}: {e}")))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn read_path(path: &str) -> Result<Vec<u8>> {
+     Err(EngineError::Other(format!("cannot open paths on the web: {path}")))
+ }
+@@ -282,7 +282,7 @@
+     work: impl FnOnce(&JobCtx) -> Result<T> + Send + 'static,
+     apply: impl FnOnce(&mut Session, T) -> Result<Value> + Send + 'static,
+ ) -> Result<Value> {
+-    if !s.jobs.spawn || cfg!(target_arch = "wasm32") {
++    if !s.jobs.spawn || cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         let t = work(&JobCtx::new())?;
+         return apply(s, t);
+     }
+@@ -302,7 +302,7 @@
+     });
+     s.jobs.next += 1;
+     let id = JobId(s.jobs.next);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let handle = {
+         let wctx = ctx.clone();
+         let label_w = label.to_string();
+@@ -316,7 +316,7 @@
+         });
+         Some(spawned.map_err(|e| EngineError::Other(format!("could not start a background job: {e}")))?)
+     };
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         // Unreachable (wasm runs inline above); keep the types used.
+         drop((work, tx));
+@@ -335,7 +335,7 @@
+         color_restrict: s.color_restrict,
+         rx,
+         apply: Some(erased),
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         handle,
+     });
+     Ok(json!({"job": id.0}))
+@@ -350,7 +350,7 @@
+     f: impl FnOnce(&mut Document, &mut Option<LayerId>, &JobCtx) -> Result<R> + Send + 'static,
+     finish: impl FnOnce(R) -> Value + Send + 'static,
+ ) -> Result<Value> {
+-    if !s.jobs.spawn || cfg!(target_arch = "wasm32") {
++    if !s.jobs.spawn || cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         // Inline: exactly `Session::edit`, as before jobs existed.
+         let ctx = JobCtx::new();
+         let r = s.edit(label, |doc, active| f(doc, active, &ctx))?;
+@@ -487,7 +487,7 @@
+                 None => break,
+             }
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         self.jobs.draining.retain(|h| !h.is_finished());
+         std::mem::take(&mut self.jobs.events)
+     }
+@@ -515,7 +515,7 @@
+         let job = self.jobs.running.remove(i);
+         job.ctx.cancel();
+         self.end_job(&job, JobOutcome::Cancelled);
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if let Some(h) = job.handle {
+             self.jobs.draining.push(h);
+         }
+@@ -563,7 +563,7 @@
+     /// Wait for background workers of cancelled jobs to exit (tests and benchmarks measure
+     /// cancel latency with it). Native only; returns at once on wasm.
+     pub fn join_cancelled_jobs(&mut self) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         for h in self.jobs.draining.drain(..) {
+             let _ = h.join();
+         }
+diff -ruN a/crates/engine/src/layer_menu_cmds.rs b/crates/engine/src/layer_menu_cmds.rs
+--- a/crates/engine/src/layer_menu_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/layer_menu_cmds.rs	2026-10-08 18:09:51
+@@ -370,18 +370,18 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn spawn(program: &str, args: &[String]) -> Result<()> {
+     std::process::Command::new(program).args(args).spawn().map(|_| ()).map_err(|e| other(format!("{program}: {e}")))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn spawn(_: &str, _: &[String]) -> Result<()> {
+     Err(other("Reveal in Finder needs the desktop app"))
+ }
+ 
+ fn native(_: &Session) -> Enabled {
+-    if cfg!(target_arch = "wasm32") { Err("not available in the browser".into()) } else { Ok(()) }
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { Err("not available in the browser".into()) } else { Ok(()) }
+ }
+ 
+ // ---------- layer style ----------
+@@ -708,12 +708,12 @@
+     Ok(json!({"path": path, "bytes": out.bytes.len(), "width": ldoc.size.width, "height": ldoc.size.height, "warnings": out.warnings}))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
+     crate::file_cmds::write_file(path, bytes)
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn write_file(_: &str, _: &[u8]) -> Result<()> {
+     Err(other("writing files needs the desktop app"))
+ }
+diff -ruN a/crates/engine/src/lens_cmds.rs b/crates/engine/src/lens_cmds.rs
+--- a/crates/engine/src/lens_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/lens_cmds.rs	2026-10-08 18:09:51
+@@ -545,7 +545,7 @@
+         assert!((p[0] - p[2]).abs() < 0.01, "{p:?}");
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     #[test]
+     fn lens_correction_batch_over_files() {
+         let dir = std::env::temp_dir().join(format!("pc-lens-{}", std::process::id()));
+diff -ruN a/crates/engine/src/notes_cmds.rs b/crates/engine/src/notes_cmds.rs
+--- a/crates/engine/src/notes_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/notes_cmds.rs	2026-10-08 18:09:51
+@@ -144,11 +144,11 @@
+     Ok(list_json(&s.active().ok_or(EngineError::NoDocument)?.doc))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn read(path: &str) -> Result<Vec<u8>> {
+     std::fs::read(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn read(path: &str) -> Result<Vec<u8>> {
+     Err(EngineError::Other(format!("cannot read {path}: no file system on the web")))
+ }
+@@ -290,7 +290,7 @@
+         assert!(s.execute("file.import.notes", json!({"path": "/nonexistent/x.psd"})).is_err());
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     #[test]
+     fn import_notes_from_pcraft_and_psd() {
+         let dir = std::env::temp_dir().join(format!("pc-notes-{}", std::process::id()));
+diff -ruN a/crates/engine/src/photo_cmds.rs b/crates/engine/src/photo_cmds.rs
+--- a/crates/engine/src/photo_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/photo_cmds.rs	2026-10-08 18:09:51
+@@ -26,19 +26,19 @@
+ 
+ /// Wall-clock timer for the `ms` fields of results (always 0 on the web, where
+ /// `std::time::Instant` is unavailable).
+-pub(crate) struct Stopwatch(#[cfg(not(target_arch = "wasm32"))] std::time::Instant);
++pub(crate) struct Stopwatch(#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))] std::time::Instant);
+ 
+ impl Stopwatch {
+     pub(crate) fn start() -> Self {
+         Stopwatch(
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             std::time::Instant::now(),
+         )
+     }
+     pub(crate) fn ms(&self) -> f64 {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         return self.0.elapsed().as_secs_f64() * 1000.0;
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         0.0
+     }
+ }
+diff -ruN a/crates/engine/src/plugin_cmds.rs b/crates/engine/src/plugin_cmds.rs
+--- a/crates/engine/src/plugin_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/plugin_cmds.rs	2026-10-08 18:09:51
+@@ -162,12 +162,12 @@
+     Ok(describe(&registry::install(plugin)))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn load_path(path: &str) -> Result<Plugin> {
+     registry::load_file(std::path::Path::new(path), photocraft_plugins::Limits::default()).map_err(err)
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn load_path(_: &str) -> Result<Plugin> {
+     Err(EngineError::Other("installing from a path is not available on the web; pass the module as base64 `data`".into()))
+ }
+@@ -190,7 +190,7 @@
+     *last = Some((folder.to_string(), load_folder(folder)));
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn load_folder(folder: &str) -> Value {
+     match registry::load_folder(std::path::Path::new(folder)) {
+         Ok(r) => json!({"folder": folder, "loaded": r.loaded, "failed": r.failed.iter().map(|(f, e)| json!({"file": f, "error": e})).collect::<Vec<_>>()}),
+@@ -198,7 +198,7 @@
+     }
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn load_folder(folder: &str) -> Value {
+     json!({"folder": folder, "error": "plug-in folders are not available on the web"})
+ }
+diff -ruN a/crates/engine/src/preset_store.rs b/crates/engine/src/preset_store.rs
+--- a/crates/engine/src/preset_store.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/preset_store.rs	2026-10-08 18:09:51
+@@ -120,12 +120,12 @@
+ }
+ 
+ /// A store directory on disk (desktop).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub struct DirBackend {
+     root: std::path::PathBuf,
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl DirBackend {
+     pub fn new(root: impl Into<std::path::PathBuf>) -> Self {
+         DirBackend { root: root.into() }
+@@ -161,7 +161,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl PresetBackend for DirBackend {
+     fn list(&self) -> Result<Vec<(String, u64)>, String> {
+         let mut out = Vec::new();
+@@ -530,25 +530,25 @@
+     // Reads stay sequential (the backend need not be Sync); decoding is the expensive part.
+     let raw: Vec<Result<Vec<u8>, String>> = hashes.iter().map(read).collect();
+     let dec = |r: &Result<Vec<u8>, String>| r.as_ref().map_err(Clone::clone).and_then(|b| decode_tip(b));
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         raw.par_iter().map(dec).collect()
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         raw.iter().map(dec).collect()
+     }
+ }
+ 
+ /// Open a store directory (desktop). Never fails: problems become warnings.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn open_dir(root: impl Into<std::path::PathBuf>) -> Opened {
+     open(Box::new(DirBackend::new(root)))
+ }
+ 
+ /// Open a store directory on a background thread; the receiver yields it once loaded.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn open_dir_async(root: std::path::PathBuf) -> std::sync::mpsc::Receiver<Opened> {
+     let (tx, rx) = std::sync::mpsc::channel();
+     let spawned = std::thread::Builder::new().name("brush-presets".into()).spawn(move || {
+diff -ruN a/crates/engine/src/print_cmds.rs b/crates/engine/src/print_cmds.rs
+--- a/crates/engine/src/print_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/print_cmds.rs	2026-10-08 18:09:51
+@@ -368,7 +368,7 @@
+     )
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn spool_pdf(argv: &[String]) -> Result<String> {
+     let out = std::process::Command::new(&argv[0]).args(&argv[1..]).output().map_err(|e| other(format!("could not run `lp` (CUPS): {e}")))?;
+     if !out.status.success() {
+@@ -376,7 +376,7 @@
+     }
+     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn spool_pdf(_: &[String]) -> Result<String> {
+     Err(other("printing needs the desktop app"))
+ }
+diff -ruN a/crates/engine/src/web_cmds.rs b/crates/engine/src/web_cmds.rs
+--- a/crates/engine/src/web_cmds.rs	2026-10-08 18:09:51
++++ b/crates/engine/src/web_cmds.rs	2026-10-08 18:09:51
+@@ -604,10 +604,10 @@
+ /// position-independent. Error diffusion carries error down the image, so it stays sequential.
+ fn quantize_rows(px: &mut [[f32; 4]], w: usize, pal: &[[u8; 3]], dither: Dither, amount: f32, t: Option<usize>) -> Vec<u8> {
+     let h = px.len() / w.max(1);
+-    if dither == Dither::Diffusion || h < 128 || cfg!(target_arch = "wasm32") {
++    if dither == Dither::Diffusion || h < 128 || cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         return quantize_band(px, w, 0, pal, dither, amount, t);
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         let band = w * 64;
+@@ -619,7 +619,7 @@
+         idx
+     }
+     // Single-threaded on wasm (the early return above always takes this path there).
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     quantize_band(px, w, 0, pal, dither, amount, t)
+ }
+ 
+@@ -1134,7 +1134,7 @@
+         return Ok(json!({"enabled": false}));
+     }
+     match dir {
+-        Some(dir) if !cfg!(target_arch = "wasm32") => {
++        Some(dir) if !cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) => {
+             let (files, errors) = generate_assets(&d.doc, &dir);
+             Ok(json!({"enabled": true, "dir": dir, "files": files, "errors": errors}))
+         }
+@@ -1145,7 +1145,7 @@
+ /// After a save: regenerate the document's image assets when Generate › Image Assets is on.
+ pub fn on_saved(s: &Session, index: usize) -> Option<Value> {
+     let d = s.documents().get(index)?;
+-    if !s.file_menu.image_assets.contains(&d.doc.id) || cfg!(target_arch = "wasm32") {
++    if !s.file_menu.image_assets.contains(&d.doc.id) || cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         return None;
+     }
+     let dir = assets_dir(d.path.as_deref()?);
+diff -ruN a/crates/format/src/atomic.rs b/crates/format/src/atomic.rs
+--- a/crates/format/src/atomic.rs	2026-10-08 18:09:51
++++ b/crates/format/src/atomic.rs	2026-10-08 18:09:51
+@@ -160,11 +160,11 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn sleep_ms(ms: u64) {
+     std::thread::sleep(std::time::Duration::from_millis(ms));
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn sleep_ms(_ms: u64) {}
+ 
+ /// Write through a symlink to the file it points at, instead of replacing the link.
+diff -ruN a/crates/format/src/autosave.rs b/crates/format/src/autosave.rs
+--- a/crates/format/src/autosave.rs	2026-10-08 18:09:51
++++ b/crates/format/src/autosave.rs	2026-10-08 18:09:51
+@@ -9,7 +9,7 @@
+ //! [`RecoveryStore`] is the app-facing lifecycle: an entry is only deleted once
+ //! the document is saved or closed, never just because it was recovered.
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use std::collections::HashMap;
+ use std::path::{Path, PathBuf};
+ use std::sync::mpsc::{self, Receiver, Sender};
+@@ -189,7 +189,7 @@
+ /// that entry in place (each save is atomic, so the old copy stays loadable until the new one is
+ /// complete), and saving or closing it removes the entry. Nothing is deleted just because it was
+ /// recovered, so a second crash before the next autosave loses nothing.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub struct RecoveryStore {
+     dir: PathBuf,
+     session: String,
+@@ -197,7 +197,7 @@
+     adopted: HashMap<u64, String>,
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl RecoveryStore {
+     pub fn new(recovery_dir: impl Into<PathBuf>) -> Self {
+         use std::sync::atomic::{AtomicU64, Ordering};
+diff -ruN a/crates/format/src/lib.rs b/crates/format/src/lib.rs
+--- a/crates/format/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/format/src/lib.rs	2026-10-08 18:09:51
+@@ -35,7 +35,7 @@
+ use photocraft_raster::Rgba8Image;
+ 
+ pub use atomic::atomic_write;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub use autosave::RecoveryStore;
+ pub use autosave::{Autosaver, RecoveryEntry, discard_recovery, list_recovery, recover};
+ pub use convert::MAX_GROUP_DEPTH;
+diff -ruN a/crates/format/src/store.rs b/crates/format/src/store.rs
+--- a/crates/format/src/store.rs	2026-10-08 18:09:51
++++ b/crates/format/src/store.rs	2026-10-08 18:09:51
+@@ -348,7 +348,7 @@
+ 
+ /// Compresses `objects` on scoped worker threads (sequentially on wasm).
+ fn par_compress<'a>(objects: &[(&'a String, &'a Object)]) -> Result<Vec<Compressed<'a>>> {
+-    let threads = if cfg!(target_arch = "wasm32") { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 32) };
++    let threads = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 32) };
+     if threads < 2 || objects.len() < 2 {
+         return Ok(objects.iter().map(|(p, o)| (*p, Arc::new(o.compressed()))).collect());
+     }
+diff -ruN a/crates/gpu/Cargo.toml b/crates/gpu/Cargo.toml
+--- a/crates/gpu/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/gpu/Cargo.toml	2026-10-08 18:09:51
+@@ -18,7 +18,7 @@
+ wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
+ log = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ # Effect distance fields are computed in parallel bands.
+ rayon = { workspace = true }
+ 
+diff -ruN a/crates/gpu/src/fx.rs b/crates/gpu/src/fx.rs
+--- a/crates/gpu/src/fx.rs	2026-10-08 18:09:51
++++ b/crates/gpu/src/fx.rs	2026-10-08 18:09:51
+@@ -472,13 +472,13 @@
+     out
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn par_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync + Send) -> Vec<R> {
+     use rayon::prelude::*;
+     items.into_par_iter().map(f).collect()
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn par_map<T, R>(items: Vec<T>, f: impl Fn(T) -> R) -> Vec<R> {
+     items.into_iter().map(f).collect()
+ }
+diff -ruN a/crates/gpu/src/health.rs b/crates/gpu/src/health.rs
+--- a/crates/gpu/src/health.rs	2026-10-08 18:09:51
++++ b/crates/gpu/src/health.rs	2026-10-08 18:09:51
+@@ -138,7 +138,7 @@
+     /// Returns whether the device is still healthy afterwards. `Device::poll` panics on a lost
+     /// device, so a panic is caught and recorded as a loss (native only; the web has no blocking
+     /// wait).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn wait(&self, device: &wgpu::Device, index: Option<wgpu::SubmissionIndex>) -> bool {
+         if !self.is_ok() {
+             return false;
+diff -ruN a/crates/gpu/src/lib.rs b/crates/gpu/src/lib.rs
+--- a/crates/gpu/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/gpu/src/lib.rs	2026-10-08 18:09:51
+@@ -882,7 +882,7 @@
+         stats.cells = cells.len();
+         // The previous intermediate submit (waited for before the next is queued; the web has
+         // no blocking wait and relies on the browser's own scheduling).
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let mut last_submit: Option<wgpu::SubmissionIndex> = None;
+         // Work recorded and bytes evicted since the last submit.
+         let (mut work, mut freed) = (0u64, 0u64);
+@@ -910,7 +910,7 @@
+                 // batches of uploads and evicted pages are in flight.
+                 let done = std::mem::replace(encoder, device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("pc_compose") }));
+                 let index = queue.submit([done.finish()]);
+-                #[cfg(not(target_arch = "wasm32"))]
++                #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+                 if let Some(prev) = last_submit.replace(index) {
+                     match &self.health {
+                         Some(h) => {
+@@ -921,7 +921,7 @@
+                         }
+                     }
+                 }
+-                #[cfg(target_arch = "wasm32")]
++                #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+                 let _ = index;
+                 self.staged = 0;
+                 work = 0;
+@@ -1611,12 +1611,12 @@
+ /// A start time when `PHOTOCRAFT_FX_TRACE=1` (it prints the CPU time of effect shapes and
+ /// distance fields); never on wasm.
+ fn web_time_now() -> Option<std::time::Instant> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         static T: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+         T.get_or_init(|| std::env::var_os("PHOTOCRAFT_FX_TRACE").is_some()).then(std::time::Instant::now)
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     None
+ }
+ 
+@@ -1815,13 +1815,13 @@
+ }
+ 
+ /// Blocking readback of a composite (native tests and tools).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn render_to_vec(comp: &mut Compositor, device: &wgpu::Device, queue: &wgpu::Queue, doc: &Document, rect: Rect) -> Result<Vec<[f32; 4]>, Unsupported> {
+     render_to_vec_stats(comp, device, queue, doc, rect).map(|(v, _)| v)
+ }
+ 
+ /// [`render_to_vec`] plus the render's [`Stats`].
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn render_to_vec_stats(
+     comp: &mut Compositor,
+     device: &wgpu::Device,
+diff -ruN a/crates/io/src/pixels.rs b/crates/io/src/pixels.rs
+--- a/crates/io/src/pixels.rs	2026-10-08 18:09:51
++++ b/crates/io/src/pixels.rs	2026-10-08 18:09:51
+@@ -168,7 +168,7 @@
+ /// `items.map(f)` on scoped threads (one per item; callers pass a handful of channels or
+ /// bands), in order; sequential on wasm or for a single item.
+ pub fn par_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R> {
+-    if cfg!(target_arch = "wasm32") || items.len() < 2 {
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) || items.len() < 2 {
+         return items.into_iter().map(f).collect();
+     }
+     std::thread::scope(|sc| {
+@@ -184,7 +184,7 @@
+ 
+ /// `0..n` split into about one band per core.
+ pub fn bands(n: usize) -> Vec<std::ops::Range<usize>> {
+-    let k = if cfg!(target_arch = "wasm32") { 1 } else { std::thread::available_parallelism().map_or(1, |v| v.get()).clamp(1, 32) };
++    let k = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 1 } else { std::thread::available_parallelism().map_or(1, |v| v.get()).clamp(1, 32) };
+     let step = n.div_ceil(k).max(1);
+     (0..n).step_by(step).map(|a| a..(a + step).min(n)).collect()
+ }
+diff -ruN a/crates/io/src/psd_export.rs b/crates/io/src/psd_export.rs
+--- a/crates/io/src/psd_export.rs	2026-10-08 18:09:51
++++ b/crates/io/src/psd_export.rs	2026-10-08 18:09:51
+@@ -633,14 +633,14 @@
+                 Ok(Source { uuid: path.clone(), size, dpi })
+             }
+             SmartSource::Linked { path } => {
+-                #[cfg(not(target_arch = "wasm32"))]
++                #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+                 {
+                     let bytes = std::fs::read(path).map_err(|e| format!("the linked file {path} can't be read: {e}"))?;
+                     let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_string();
+                     self.warnings.push(format!("the linked smart object {name} was embedded (PSD export keeps no external links)"));
+                     self.embed(&name, &bytes)
+                 }
+-                #[cfg(target_arch = "wasm32")]
++                #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+                 Err(format!("the linked file {path} can't be read here"))
+             }
+             SmartSource::Embedded { file_name, bytes } => self.embed(file_name, bytes),
+diff -ruN a/crates/plugins/Cargo.toml b/crates/plugins/Cargo.toml
+--- a/crates/plugins/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/plugins/Cargo.toml	2026-10-08 18:09:51
+@@ -21,7 +21,7 @@
+ wasmi = { version = "2.0.0", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"] }
+ 
+ # Bands run in parallel on native; wasm builds stay single-threaded.
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+ 
+ [dev-dependencies]
+diff -ruN a/crates/plugins/src/apply.rs b/crates/plugins/src/apply.rs
+--- a/crates/plugins/src/apply.rs	2026-10-08 18:09:51
++++ b/crates/plugins/src/apply.rs	2026-10-08 18:09:51
+@@ -131,17 +131,17 @@
+             r
+         };
+         // A few bands at a time (one per worker), so peak memory stays near one band per thread.
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let group = rayon::current_num_threads().max(1);
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let group = 1;
+         for chunk in bands.chunks(group) {
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             let results: Vec<Result<Surface>> = {
+                 use rayon::prelude::*;
+                 chunk.par_iter().map(run).collect()
+             };
+-            #[cfg(target_arch = "wasm32")]
++            #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+             let results: Vec<Result<Surface>> = chunk.iter().map(run).collect();
+             for r in results {
+                 for (c, t) in r?.tiles() {
+diff -ruN a/crates/plugins/src/registry.rs b/crates/plugins/src/registry.rs
+--- a/crates/plugins/src/registry.rs	2026-10-08 18:09:51
++++ b/crates/plugins/src/registry.rs	2026-10-08 18:09:51
+@@ -7,7 +7,7 @@
+ use std::sync::atomic::{AtomicU64, Ordering};
+ use std::sync::{Arc, RwLock};
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use crate::Error;
+ use crate::{Limits, Plugin, Result};
+ 
+@@ -56,7 +56,7 @@
+ 
+ /// Reads a `.wasm` file (refusing anything that isn't a regular file or exceeds the module limit)
+ /// and loads it.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn load_file(path: &std::path::Path, limits: Limits) -> Result<Plugin> {
+     use std::io::Read;
+     let meta = std::fs::metadata(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
+@@ -83,7 +83,7 @@
+ 
+ /// Installs every `*.wasm` directly in `dir` (not recursive), in file-name order. A bad module is
+ /// reported and skipped; the others still load.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn load_folder(dir: &std::path::Path) -> Result<FolderReport> {
+     let rd = std::fs::read_dir(dir).map_err(|e| Error::Io(format!("{}: {e}", dir.display())))?;
+     let mut files: Vec<std::path::PathBuf> =
+diff -ruN a/crates/plugins/src/runtime.rs b/crates/plugins/src/runtime.rs
+--- a/crates/plugins/src/runtime.rs	2026-10-08 18:09:51
++++ b/crates/plugins/src/runtime.rs	2026-10-08 18:09:51
+@@ -71,17 +71,17 @@
+ /// When a run must stop: a wall-clock deadline (native) and a flag shared by parallel bands.
+ #[derive(Clone)]
+ pub(crate) struct Deadline {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     at: std::time::Instant,
+     abort: Arc<AtomicBool>,
+ }
+ 
+ impl Deadline {
+     pub(crate) fn new(limits: &Limits) -> Self {
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let _ = limits;
+         Self {
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             at: std::time::Instant::now() + std::time::Duration::from_millis(limits.wall_time_ms),
+             abort: Arc::new(AtomicBool::new(false)),
+         }
+@@ -93,7 +93,7 @@
+         if self.abort.load(Ordering::Relaxed) {
+             return Err(Error::Failed("stopped because another band failed".into()));
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if std::time::Instant::now() >= self.at {
+             self.abort();
+             return Err(Error::Limit("time budget".into()));
+diff -ruN a/crates/psd/src/file.rs b/crates/psd/src/file.rs
+--- a/crates/psd/src/file.rs	2026-10-08 18:09:51
++++ b/crates/psd/src/file.rs	2026-10-08 18:09:51
+@@ -256,13 +256,13 @@
+     }
+ 
+     /// Reads a file from disk (native targets only).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn open(path: impl AsRef<std::path::Path>) -> std::io::Result<Result<Self>> {
+         Ok(Self::from_bytes(&std::fs::read(path)?))
+     }
+ 
+     /// Writes the file to disk (native targets only).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn save(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+         let b = self.to_bytes().map_err(std::io::Error::other)?;
+         std::fs::write(path, b)
+diff -ruN a/crates/psd/tests/roundtrip.rs b/crates/psd/tests/roundtrip.rs
+--- a/crates/psd/tests/roundtrip.rs	2026-10-08 18:09:51
++++ b/crates/psd/tests/roundtrip.rs	2026-10-08 18:09:51
+@@ -273,7 +273,7 @@
+     f.header.version = Version::Psd;
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn save_and_open() {
+     let f = testgen::small(Version::Psd, Compression::Rle);
+diff -ruN a/crates/raw/Cargo.toml b/crates/raw/Cargo.toml
+--- a/crates/raw/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/raw/Cargo.toml	2026-10-08 18:09:51
+@@ -15,7 +15,7 @@
+ [dependencies]
+ 
+ # Parallel bands on native; wasm builds stay single-threaded.
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+ 
+ [dev-dependencies]
+diff -ruN a/crates/raw/src/par.rs b/crates/raw/src/par.rs
+--- a/crates/raw/src/par.rs	2026-10-08 18:09:51
++++ b/crates/raw/src/par.rs	2026-10-08 18:09:51
+@@ -3,23 +3,23 @@
+ /// Calls `f(index, chunk)` for each `chunk`-sized piece of `buf`.
+ pub(crate) fn chunks_mut<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize, &mut [T]) + Sync + Send) {
+     let chunk = chunk.max(1);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         buf.par_chunks_mut(chunk).enumerate().for_each(|(i, c)| f(i, c));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     buf.chunks_mut(chunk).enumerate().for_each(|(i, c)| f(i, c));
+ }
+ 
+ /// Maps `f` over `0..n`, keeping order.
+ pub(crate) fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         (0..n).into_par_iter().map(f).collect()
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     (0..n).map(f).collect()
+ }
+ 
+diff -ruN a/crates/testkit/Cargo.toml b/crates/testkit/Cargo.toml
+--- a/crates/testkit/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/testkit/Cargo.toml	2026-10-08 18:09:51
+@@ -13,6 +13,6 @@
+ photocraft-raster = { workspace = true }
+ serde_json = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ # In-process resident memory for the benchmarks (`perf`; MIT OR Apache-2.0).
+ memory-stats = "1.2"
+diff -ruN a/crates/testkit/src/lib.rs b/crates/testkit/src/lib.rs
+--- a/crates/testkit/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/testkit/src/lib.rs	2026-10-08 18:09:51
+@@ -1,5 +1,5 @@
+ //! photocraft-testkit
+ #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub mod perf;
+diff -ruN a/crates/text/src/cjk.rs b/crates/text/src/cjk.rs
+--- a/crates/text/src/cjk.rs	2026-10-08 18:09:51
++++ b/crates/text/src/cjk.rs	2026-10-08 18:09:51
+@@ -225,7 +225,7 @@
+ 
+ /// System font files for `script`, most preferred first. Paths that don't exist are included;
+ /// callers skip them.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn font_files(script: CjkScript) -> Vec<FontFile> {
+     use CjkScript::*;
+     let f = |p: &str, family: &'static str| FontFile { path: p.into(), family };
+@@ -298,7 +298,7 @@
+ 
+ /// Broad-coverage fonts tried after every script's own fonts (they cover Han, kana and Hangul
+ /// but look worse than the script fonts).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn last_resort_files() -> Vec<FontFile> {
+     let f = |p: &str| FontFile { path: p.into(), family: "" };
+     if cfg!(target_os = "macos") {
+@@ -314,7 +314,7 @@
+ /// macOS ships PingFang as a pre-installed "mobile asset" outside `/System/Library/Fonts`
+ /// (`/System/Library/AssetsV2/com_apple_MobileAsset_Font*/<hash>.asset/AssetData/PingFang.ttc`).
+ /// Looks there (a few small directory listings) and in the pre-Catalina location.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn mac_pingfang() -> Option<std::path::PathBuf> {
+     use std::path::{Path, PathBuf};
+     let old = PathBuf::from("/System/Library/Fonts/PingFang.ttc");
+diff -ruN a/crates/text/src/fonts.rs b/crates/text/src/fonts.rs
+--- a/crates/text/src/fonts.rs	2026-10-08 18:09:51
++++ b/crates/text/src/fonts.rs	2026-10-08 18:09:51
+@@ -124,7 +124,7 @@
+             return;
+         }
+         self.system_loaded = true;
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             // One call per file: fontique's directory scan is much slower on large folders.
+             let mut files = Vec::new();
+@@ -332,7 +332,7 @@
+     ResolvedFont { family: family.trim().to_string(), weight, italic, exact: false }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn collect_font_files(dir: &std::path::Path, depth: u32, out: &mut Vec<std::path::PathBuf>) {
+     let Ok(rd) = std::fs::read_dir(dir) else {
+         return;
+@@ -349,7 +349,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn system_font_dirs() -> Vec<std::path::PathBuf> {
+     use std::path::PathBuf;
+     let home = std::env::var_os("HOME").map(PathBuf::from);
+@@ -390,7 +390,7 @@
+     name.starts_with('.')
+ }
+ 
+-#[cfg(all(test, not(target_arch = "wasm32")))]
++#[cfg(all(test, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ mod tests {
+     #[test]
+     fn hidden_families_sort_last_and_are_not_listed() {
+diff -ruN a/crates/text/src/lib.rs b/crates/text/src/lib.rs
+--- a/crates/text/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/text/src/lib.rs	2026-10-08 18:09:51
+@@ -138,7 +138,7 @@
+ pub fn shared() -> &'static std::sync::Mutex<TextEngine> {
+     static ENGINE: std::sync::OnceLock<std::sync::Mutex<TextEngine>> = std::sync::OnceLock::new();
+     ENGINE.get_or_init(|| {
+-        let use_system = cfg!(not(target_arch = "wasm32")) && !cfg!(test) && std::env::var_os("PHOTOCRAFT_NO_SYSTEM_FONTS").is_none();
++        let use_system = cfg!(not(all(target_arch = "wasm32", not(target_os = "kandelo")))) && !cfg!(test) && std::env::var_os("PHOTOCRAFT_NO_SYSTEM_FONTS").is_none();
+         std::sync::Mutex::new(if use_system { TextEngine::with_system_fonts() } else { TextEngine::new() })
+     })
+ }
+diff -ruN a/crates/text/src/vertical_tests.rs b/crates/text/src/vertical_tests.rs
+--- a/crates/text/src/vertical_tests.rs	2026-10-08 18:09:51
++++ b/crates/text/src/vertical_tests.rs	2026-10-08 18:09:51
+@@ -21,7 +21,7 @@
+ 
+ /// An engine with an installed Japanese font registered, and that font's family.
+ fn cjk_engine() -> Option<(TextEngine, String)> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     for script in [crate::cjk::CjkScript::Japanese, crate::cjk::CjkScript::SimplifiedChinese] {
+         for f in crate::cjk::font_files(script) {
+             let Ok(bytes) = std::fs::read(&f.path) else { continue };
+diff -ruN a/crates/ui-egui/Cargo.toml b/crates/ui-egui/Cargo.toml
+--- a/crates/ui-egui/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/ui-egui/Cargo.toml	2026-10-08 18:09:51
+@@ -30,7 +30,7 @@
+ log = { workspace = true }
+ base64 = "0.22"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+ 
+ [dev-dependencies]
+diff -ruN a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
+--- a/crates/ui-egui/src/canvas.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/canvas.rs	2026-10-08 18:09:51
+@@ -1204,7 +1204,7 @@
+     let area = ui.available_rect_before_wrap();
+     paint_dots(ui, area);
+     // File › Open Recent, newest first (on the web there are no paths to reopen).
+-    let recent: Vec<String> = if cfg!(target_arch = "wasm32") { Vec::new() } else { app.ui.recent_files.iter().take(HOME_RECENT).cloned().collect() };
++    let recent: Vec<String> = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { Vec::new() } else { app.ui.recent_files.iter().take(HOME_RECENT).cloned().collect() };
+     let recent_h = if recent.is_empty() { 0.0 } else { 34.0 + recent.len() as f32 * HOME_RECENT_ROW };
+     let card = Rect::from_center_size(area.center(), egui::vec2(460.0, 330.0 + recent_h));
+     let new_label = crate::shortcuts::command_label(app, "New document…", "file.new");
+diff -ruN a/crates/ui-egui/src/channel_view.rs b/crates/ui-egui/src/channel_view.rs
+--- a/crates/ui-egui/src/channel_view.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/channel_view.rs	2026-10-08 18:09:51
+@@ -165,12 +165,12 @@
+     if w == 0 {
+         return px;
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         px.par_chunks_mut(w).enumerate().for_each(|(y, out)| row(y, out));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     for (y, out) in px.chunks_mut(w).enumerate() {
+         row(y, out);
+     }
+diff -ruN a/crates/ui-egui/src/cjk_fonts.rs b/crates/ui-egui/src/cjk_fonts.rs
+--- a/crates/ui-egui/src/cjk_fonts.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/cjk_fonts.rs	2026-10-08 18:09:51
+@@ -49,11 +49,11 @@
+ }
+ 
+ impl Sources {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn system() -> Self {
+         Self { locale: || cjk::ui_locale().map(str::to_string), files: cjk::font_files, last_resort: cjk::last_resort_files, embedded: craft_embedded }
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     pub fn system() -> Self {
+         Self { locale: || None, files: |_| Vec::new(), last_resort: Vec::new, embedded: craft_embedded }
+     }
+@@ -272,7 +272,7 @@
+ }
+ 
+ #[cfg(test)]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod tests {
+     use super::*;
+     use std::sync::Mutex;
+diff -ruN a/crates/ui-egui/src/export_dialog.rs b/crates/ui-egui/src/export_dialog.rs
+--- a/crates/ui-egui/src/export_dialog.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/export_dialog.rs	2026-10-08 18:09:51
+@@ -204,7 +204,7 @@
+ /// from File › Export › Export Preferences (engine `file.export.quickExport`). On the web (no
+ /// file system) it falls back to a PNG download through the export service.
+ pub fn quick_export_png(app: &mut PhotocraftApp) -> Result<Value, String> {
+-    if !cfg!(target_arch = "wasm32") {
++    if !cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         let prefs = app.session.prefs().export.clone();
+         let fmt = serde_json::to_value(prefs.quick_export_format).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_else(|| "png".into());
+         let same = serde_json::to_value(prefs.quick_export_location).ok().is_some_and(|v| v == "sameFolder");
+diff -ruN a/crates/ui-egui/src/file_open.rs b/crates/ui-egui/src/file_open.rs
+--- a/crates/ui-egui/src/file_open.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/file_open.rs	2026-10-08 18:09:51
+@@ -45,7 +45,7 @@
+     }
+ 
+     /// Read and open the file at `path` (see [`open_file`](Self::open_file)).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn open_path(&mut self, path: &str) -> Result<Vec<String>, String> {
+         // Documents opening in the background are read on the worker too (a 2 GB PSB read
+         // would block the window). Preset files (brushes, gradients) go the usual way.
+@@ -58,7 +58,7 @@
+         self.open_file(path, &bytes)
+     }
+ 
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     pub fn open_path(&mut self, path: &str) -> Result<Vec<String>, String> {
+         Err(format!("cannot open paths on the web: {path}"))
+     }
+@@ -121,12 +121,12 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn absolute(p: &str) -> String {
+     std::path::absolute(p).map(|a| a.to_string_lossy().to_string()).unwrap_or_else(|_| p.to_string())
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn absolute(p: &str) -> String {
+     p.to_string()
+ }
+diff -ruN a/crates/ui-egui/src/gpu_canvas.rs b/crates/ui-egui/src/gpu_canvas.rs
+--- a/crates/ui-egui/src/gpu_canvas.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/gpu_canvas.rs	2026-10-08 18:09:51
+@@ -450,7 +450,7 @@
+             d.regenerate_mips(device, queue, res, [region.x0 as u32, region.y0 as u32, region.x1 as u32, region.y1 as u32]);
+             if std::env::var_os("PHOTOCRAFT_GPU_SYNC").is_some() {
+                 // Benchmarking: wait for the GPU so callers can time the whole refresh.
+-                #[cfg(not(target_arch = "wasm32"))]
++                #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+                 self.health.wait(device, None);
+             }
+         } else if fresh {
+@@ -626,7 +626,7 @@
+     /// Read back level 0 of document `key`'s canvas texture: its format, size and the stored
+     /// (premultiplied) texels as `f32` RGBA, row-major. Waits for the GPU; for tests, benchmarks
+     /// and debugging.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn read_texels(&self, key: u64) -> Option<(wgpu::TextureFormat, [u32; 2], Vec<[f32; 4]>)> {
+         if !self.health.is_ok() {
+             return None;
+@@ -741,12 +741,12 @@
+ 
+ /// Milliseconds since first call (monotonic). Always 0 on wasm, where `std::time` is unavailable.
+ pub fn now_ms() -> f64 {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+         START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     0.0
+ }
+ 
+@@ -949,7 +949,7 @@
+     let convert = if format == FORMAT_HIGH { rgba16f } else { rgba8 };
+     out.clear();
+     out.resize(px.len() * bpp, 0);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if px.len() > 1 << 18 {
+         let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(16);
+         let chunk = px.len().div_ceil(threads);
+@@ -992,7 +992,7 @@
+ }
+ 
+ /// IEEE 754 binary16 → binary32.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn f16_to_f32(h: u16) -> f32 {
+     let sign = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
+     let exp = i32::from((h >> 10) & 0x1f);
+@@ -1011,7 +1011,7 @@
+ }
+ 
+ /// One stored texel of `format` as f32 RGBA.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn texel_to_f32(format: wgpu::TextureFormat, b: &[u8]) -> [f32; 4] {
+     let mut o = [0.0f32; 4];
+     for (i, v) in o.iter_mut().enumerate() {
+@@ -1901,7 +1901,7 @@
+         assert_eq!(premultiply_rgba8(&[[1.0, 0.5, 0.0, 0.5]]), vec![128, 64, 0, 128]);
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     #[test]
+     fn half_floats() {
+         // Every finite half survives the round trip; ties round to even; overflow saturates.
+@@ -1923,7 +1923,7 @@
+         assert_eq!(premultiply_rgba16f(&[[2.0, -1.0, f32::NAN, 0.5]]), [0x00, 0x3c, 0, 0, 0, 0, 0x00, 0x38]);
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     #[test]
+     fn shaders_validate() {
+         use wgpu::naga;
+diff -ruN a/crates/ui-egui/src/i18n/mod.rs b/crates/ui-egui/src/i18n/mod.rs
+--- a/crates/ui-egui/src/i18n/mod.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/i18n/mod.rs	2026-10-08 18:09:51
+@@ -192,7 +192,7 @@
+     *SYSTEM.get_or_init(detect_system_lang)
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn detect_system_lang() -> Lang {
+     for var in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+         if let Some(l) = std::env::var(var).ok().filter(|v| !v.is_empty()).and_then(|v| lang_from_tag(&v)) {
+@@ -223,7 +223,7 @@
+     list.split(['(', ')', ',', '"', '\n']).map(str::trim).filter(|s| !s.is_empty()).find_map(lang_from_tag)
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn detect_system_lang() -> Lang {
+     Lang::EN
+ }
+diff -ruN a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+--- a/crates/ui-egui/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/lib.rs	2026-10-08 18:09:51
+@@ -383,7 +383,7 @@
+     pub background_jobs: bool,
+     /// Background job bookkeeping: opening tabs, control replies waiting on a job.
+     pub jobs: jobs_ui::JobsUi,
+-    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
++    #[cfg(all(debug_assertions, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+     live_tokens: theme::live::LiveTokens,
+ }
+ 
+@@ -458,7 +458,7 @@
+             stylus: Default::default(),
+             background_jobs: false,
+             jobs: Default::default(),
+-            #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
++            #[cfg(all(debug_assertions, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+             live_tokens: theme::live::LiveTokens::from_env(),
+         };
+         // Saved preferences (and recovered documents) are in place before the first frame.
+@@ -851,7 +851,7 @@
+         self.last_frame_time = now;
+         self.sync_views();
+         self.check_gpu(ctx);
+-        #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
++        #[cfg(all(debug_assertions, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+         if self.live_tokens.poll(ctx, self.ui.theme) {
+             self.checker = None;
+         }
+@@ -969,13 +969,13 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn read_dropped(f: &(dyn egui::DroppedFile + Send + Sync)) -> Result<Vec<u8>, String> {
+     f.bytes()
+ }
+ 
+ /// On the web, dropped-file bytes arrive asynchronously; the web shell handles drops itself.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn read_dropped(_f: &dyn egui::DroppedFile) -> Result<Vec<u8>, String> {
+     Err("drag-and-drop on the web is handled by the page; use File → Open".into())
+ }
+diff -ruN a/crates/ui-egui/src/menus.rs b/crates/ui-egui/src/menus.rs
+--- a/crates/ui-egui/src/menus.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/menus.rs	2026-10-08 18:09:51
+@@ -243,14 +243,14 @@
+             Ok(Value::Null)
+         }
+         id if id.starts_with("file.openRecent.") => {
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             {
+                 match id.rsplit('.').next().and_then(|s| s.parse::<usize>().ok()).and_then(|i| app.ui.recent_files.get(i).cloned()) {
+                     Some(p) => open_path(app, &p),
+                     None => Err("no such recent file".to_string()),
+                 }
+             }
+-            #[cfg(target_arch = "wasm32")]
++            #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+             {
+                 let _ = app;
+                 Err("Open Recent is unavailable on the web".to_string())
+@@ -1197,7 +1197,7 @@
+         assert!(invoke(&mut app, &ctx, "file.openRecent.5", json!({})).is_err());
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     #[test]
+     fn opening_a_file_records_it_as_recent() {
+         use photocraft_color::{ColorMode, SampleType};
+diff -ruN a/crates/ui-egui/src/outline.rs b/crates/ui-egui/src/outline.rs
+--- a/crates/ui-egui/src/outline.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/outline.rs	2026-10-08 18:09:51
+@@ -41,12 +41,12 @@
+             *cell = x >= bounds.x0 && x < bounds.x1 && v > 0.5;
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         grid.par_chunks_mut(w).enumerate().for_each(|(gy, row)| sample_row(gy, row));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     grid.chunks_mut(w).enumerate().for_each(|(gy, row)| sample_row(gy, row));
+     let inside = |x: usize, y: usize| grid[y * w + x];
+     // Grid → document coordinates, clamped so coarse cells never draw outside the selection bounds.
+diff -ruN a/crates/ui-egui/src/preset_files_ui.rs b/crates/ui-egui/src/preset_files_ui.rs
+--- a/crates/ui-egui/src/preset_files_ui.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/preset_files_ui.rs	2026-10-08 18:09:51
+@@ -21,7 +21,7 @@
+ 
+ /// Command params for the file: a real path keeps the journal small; browser files arrive as bytes.
+ fn source(name: &str, bytes: &[u8]) -> Value {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if std::path::Path::new(name).is_absolute() && std::path::Path::new(name).is_file() {
+         return json!({"path": name});
+     }
+diff -ruN a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
+--- a/crates/ui-egui/src/theme.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/theme.rs	2026-10-08 18:09:51
+@@ -471,7 +471,7 @@
+ /// Set `PHOTOCRAFT_THEME_FILE=/path/tokens.json` in a debug build; the file is polled and applied
+ /// on change, so colours, radii and sizes can be tuned without recompiling. Keys are `Tokens` field
+ /// names; values are `"#rrggbb"`, `"#rrggbbaa"` or numbers. Compiled out of release builds.
+-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
++#[cfg(all(debug_assertions, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ pub mod live {
+     use super::Tokens;
+     use egui::Color32;
+diff -ruN a/crates/ui-egui/src/transform_tex.rs b/crates/ui-egui/src/transform_tex.rs
+--- a/crates/ui-egui/src/transform_tex.rs	2026-10-08 18:09:51
++++ b/crates/ui-egui/src/transform_tex.rs	2026-10-08 18:09:51
+@@ -178,12 +178,12 @@
+             *o = Color32::from_rgba_premultiplied(v[0], v[1], v[2], v[3]);
+         }
+     };
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         px.par_chunks_mut(tw).enumerate().for_each(|(ty, out)| band(ty, out));
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     for (ty, out) in px.chunks_mut(tw).enumerate() {
+         band(ty, out);
+     }
+diff -ruN a/crates/vector/Cargo.toml b/crates/vector/Cargo.toml
+--- a/crates/vector/Cargo.toml	2026-10-08 18:09:51
++++ b/crates/vector/Cargo.toml	2026-10-08 18:09:51
+@@ -15,5 +15,5 @@
+ photocraft-raster = { workspace = true }
+ photocraft-doc = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rayon = { workspace = true }
+diff -ruN a/crates/vector/src/lib.rs b/crates/vector/src/lib.rs
+--- a/crates/vector/src/lib.rs	2026-10-08 18:09:51
++++ b/crates/vector/src/lib.rs	2026-10-08 18:09:51
+@@ -167,7 +167,7 @@
+ /// resulting pieces into `surface`.
+ fn render_bands(surface: &mut Surface, r: Rect, f: &(dyn Fn(Rect) -> Vec<(Rect, Vec<f32>)> + Sync)) {
+     let bands = tile_bands(r);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use rayon::prelude::*;
+         let group = rayon::current_num_threads().max(1) * 2;
+@@ -178,7 +178,7 @@
+             }
+         }
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     for b in bands {
+         for (tr, v) in f(b) {
+             surface.write_region(tr, &v);
+diff -ruN a/crates/vector/src/raster.rs b/crates/vector/src/raster.rs
+--- a/crates/vector/src/raster.rs	2026-10-08 18:09:51
++++ b/crates/vector/src/raster.rs	2026-10-08 18:09:51
+@@ -148,9 +148,9 @@
+         if w == 0 || h == 0 {
+             return out;
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         const STRIP: usize = 32;
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if h > STRIP && w * h > 64 * 1024 {
+             use rayon::prelude::*;
+             out.par_chunks_mut(w * STRIP).enumerate().for_each(|(i, chunk)| {

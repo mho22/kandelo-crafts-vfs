@@ -1,0 +1,11 @@
+# socket2 0.6.5: musl's msghdr.msg_iovlen is a c_int.
+--- a/src/sys/unix.rs
++++ b/src/sys/unix.rs
+@@ -421,6 +421,7 @@
+     target_os = "fuchsia",
+     target_os = "haiku",
+     target_os = "hurd",
++    target_os = "kandelo",
+     target_os = "illumos",
+     target_os = "ios",
+     target_os = "visionos",

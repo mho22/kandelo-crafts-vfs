@@ -1,0 +1,336 @@
+# rfd 0.17.2: Kandelo takes the Linux/BSD backend (XDG desktop portal over
+# D-Bus, zenity as the fallback), not the browser one that
+# target_arch = "wasm32" selects. Without a portal or zenity on the
+# machine, the dialog fails at run time.
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2026-10-08 18:09:38
++++ b/Cargo.toml	2026-10-08 18:09:38
+@@ -82,39 +82,39 @@
+ [dev-dependencies.futures]
+ version = "0.3.12"
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.glib-sys]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.glib-sys]
+ version = "0.18.0"
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.gobject-sys]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.gobject-sys]
+ version = "0.18.0"
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.gtk-sys]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.gtk-sys]
+ version = "0.18.0"
+ features = ["v3_24"]
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.libc]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.libc]
+ version = "0.2"
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.percent-encoding]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.percent-encoding]
+ version = "2"
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.pollster]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.pollster]
+ version = "0.4"
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.wayland-backend]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.wayland-backend]
+ version = "0.3"
+ features = ["client_system"]
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.wayland-client]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.wayland-client]
+ version = "0.31"
+ optional = true
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))'.dependencies.wayland-protocols]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "kandelo"))'.dependencies.wayland-protocols]
+ version = "0.32"
+ features = [
+     "unstable",
+@@ -122,16 +122,16 @@
+ ]
+ optional = true
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.js-sys]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.js-sys]
+ version = "0.3.46"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wasm-bindgen]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.wasm-bindgen]
+ version = "0.2.69"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wasm-bindgen-futures]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.wasm-bindgen-futures]
+ version = "0.4.19"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.web-sys]
+ version = "0.3.46"
+ features = [
+     "Document",
+diff -ruN a/examples/async.rs b/examples/async.rs
+--- a/examples/async.rs	2026-10-08 18:09:38
++++ b/examples/async.rs	2026-10-08 18:09:38
+@@ -8,7 +8,7 @@
+ 
+         if let Some(file) = file {
+             // If you are on native platform you can just get the path
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             println!("{:?}", file.path());
+ 
+             // If you care about wasm support you just read() the file
+@@ -21,12 +21,12 @@
+ 
+ use std::future::Future;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn execute<F: Future<Output = ()> + Send + 'static>(f: F) {
+     // this is stupid... use any executor of your choice instead
+     std::thread::spawn(move || futures::executor::block_on(f));
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn execute<F: Future<Output = ()> + 'static>(f: F) {
+     wasm_bindgen_futures::spawn_local(f);
+ }
+diff -ruN a/examples/save.rs b/examples/save.rs
+--- a/examples/save.rs	2026-10-08 18:09:38
++++ b/examples/save.rs	2026-10-08 18:09:38
+@@ -1,4 +1,4 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn main() {
+     let path = std::env::current_dir().unwrap();
+ 
+@@ -10,7 +10,7 @@
+     println!("The user choose: {:#?}", res);
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn main() {
+     // On wasm only async dialogs are possible
+ }
+diff -ruN a/examples/simple.rs b/examples/simple.rs
+--- a/examples/simple.rs	2026-10-08 18:09:38
++++ b/examples/simple.rs	2026-10-08 18:09:38
+@@ -1,4 +1,4 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn main() {
+     let path = std::env::current_dir().unwrap();
+ 
+@@ -11,7 +11,7 @@
+     println!("The user choose: {:#?}", res);
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn main() {
+     // On wasm only async dialogs are possible
+ }
+diff -ruN a/src/backend.rs b/src/backend.rs
+--- a/src/backend.rs	2026-10-08 18:09:38
++++ b/src/backend.rs	2026-10-08 18:09:38
+@@ -1,7 +1,7 @@
+ use crate::message_dialog::MessageDialogResult;
+ use crate::FileHandle;
+ use std::future::Future;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use std::path::PathBuf;
+ use std::pin::Pin;
+ 
+@@ -11,7 +11,8 @@
+         target_os = "freebsd",
+         target_os = "dragonfly",
+         target_os = "netbsd",
+-        target_os = "openbsd"
++        target_os = "openbsd",
++        target_os = "kandelo"
+     ),
+     not(feature = "gtk3")
+ ))]
+@@ -23,14 +24,15 @@
+         target_os = "freebsd",
+         target_os = "dragonfly",
+         target_os = "netbsd",
+-        target_os = "openbsd"
++        target_os = "openbsd",
++        target_os = "kandelo"
+     ),
+     feature = "gtk3"
+ ))]
+ mod gtk3;
+ #[cfg(target_os = "macos")]
+ mod macos;
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ mod wasm;
+ #[cfg(target_os = "windows")]
+ mod win_cid;
+@@ -40,7 +42,8 @@
+         target_os = "freebsd",
+         target_os = "dragonfly",
+         target_os = "netbsd",
+-        target_os = "openbsd"
++        target_os = "openbsd",
++        target_os = "kandelo"
+     ),
+     not(feature = "gtk3")
+ ))]
+@@ -51,20 +54,20 @@
+ //
+ 
+ /// Dialog used to pick file/files
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub trait FilePickerDialogImpl {
+     fn pick_file(self) -> Option<PathBuf>;
+     fn pick_files(self) -> Option<Vec<PathBuf>>;
+ }
+ 
+ /// Dialog used to save file
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub trait FileSaveDialogImpl {
+     fn save_file(self) -> Option<PathBuf>;
+ }
+ 
+ /// Dialog used to pick folder
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub trait FolderPickerDialogImpl {
+     fn pick_folder(self) -> Option<PathBuf>;
+     fn pick_folders(self) -> Option<Vec<PathBuf>>;
+@@ -86,9 +89,9 @@
+ //
+ 
+ // Return type of async dialogs:
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub type DialogFutureType<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub type DialogFutureType<T> = Pin<Box<dyn Future<Output = T>>>;
+ 
+ /// Dialog used to pick file/files
+@@ -98,7 +101,7 @@
+ }
+ 
+ /// Dialog used to pick folder
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub trait AsyncFolderPickerDialogImpl {
+     fn pick_folder_async(self) -> DialogFutureType<Option<FileHandle>>;
+     fn pick_folders_async(self) -> DialogFutureType<Option<Vec<FileHandle>>>;
+diff -ruN a/src/file_dialog.rs b/src/file_dialog.rs
+--- a/src/file_dialog.rs	2026-10-08 18:09:38
++++ b/src/file_dialog.rs	2026-10-08 18:09:38
+@@ -34,7 +34,7 @@
+ 
+ impl FileDialog {
+     /// New file dialog builder
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn new() -> Self {
+         Default::default()
+     }
+@@ -110,13 +110,13 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use crate::backend::{FilePickerDialogImpl, FileSaveDialogImpl, FolderPickerDialogImpl};
+ 
+ #[cfg(target_os = "macos")]
+ use crate::backend::FileOrFolderPickerDialogImpl;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl FileDialog {
+     /// Pick one file
+     pub fn pick_file(self) -> Option<PathBuf> {
+@@ -258,7 +258,7 @@
+ use crate::backend::AsyncFileOrFolderPickerDialogImpl;
+ use crate::backend::AsyncFilePickerDialogImpl;
+ use crate::backend::AsyncFileSaveDialogImpl;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use crate::backend::AsyncFolderPickerDialogImpl;
+ 
+ use std::future::Future;
+@@ -274,7 +274,7 @@
+         AsyncFilePickerDialogImpl::pick_files_async(self.file_dialog)
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     /// Pick one folder
+     ///
+     /// Does not exist in `WASM32`
+@@ -282,7 +282,7 @@
+         AsyncFolderPickerDialogImpl::pick_folder_async(self.file_dialog)
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     /// Pick multiple folders
+     ///
+     /// Does not exist in `WASM32`
+diff -ruN a/src/file_handle/mod.rs b/src/file_handle/mod.rs
+--- a/src/file_handle/mod.rs	2026-10-08 18:09:38
++++ b/src/file_handle/mod.rs	2026-10-08 18:09:38
+@@ -5,16 +5,16 @@
+ //!
+ //! It should allow a user to treat web browser files same way as native files
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod native;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub use native::FileHandle;
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ mod web;
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub use web::FileHandle;
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) use web::WasmFileHandleKind;
+ 
+ #[cfg(test)]
+@@ -27,7 +27,7 @@
+         let _ = FileHandle::read;
+         #[cfg(feature = "file-handle-inner")]
+         let _ = FileHandle::inner;
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let _ = FileHandle::path;
+     }
+ }
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-08 18:09:38
++++ b/src/lib.rs	2026-10-08 18:09:38
+@@ -136,7 +136,7 @@
+ mod file_dialog;
+ mod oneshot;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub use file_dialog::FileDialog;
+ 
+ pub use file_dialog::AsyncFileDialog;

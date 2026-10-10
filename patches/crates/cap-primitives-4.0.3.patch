@@ -1,0 +1,12 @@
+# cap-primitives 4.0.3: Kandelo's libc has O_PATH; use it for directory
+# handles as on Linux.
+--- a/src/rustix/fs/dir_utils.rs
++++ b/src/rustix/fs/dir_utils.rs
+@@ -126,6 +126,7 @@
+         target_os = "emscripten",
+         target_os = "freebsd",
+         target_os = "fuchsia",
++        target_os = "kandelo",
+         target_os = "linux",
+         target_os = "redox",
+     ))]

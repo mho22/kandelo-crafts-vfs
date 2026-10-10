@@ -1,0 +1,1232 @@
+# tokio 1.53.1: target_family = "wasm" means a browser or WASI here;
+# Kandelo is a unix target with threads, signals and mio, so it takes the
+# unix paths. Peer credentials use Linux's SO_PEERCRED (ucred).
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -875,7 +875,7 @@
+ version = "0.7"
+ features = ["rt"]
+ 
+-[target.'cfg(all(target_family = "wasm", not(target_os = "wasi")))'.dev-dependencies.wasm-bindgen-test]
++[target.'cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))'.dev-dependencies.wasm-bindgen-test]
+ version = "0.3.0"
+ 
+ [target.'cfg(all(tokio_unstable, target_has_atomic = "64"))'.dev-dependencies.tracing-mock]
+@@ -910,7 +910,7 @@
+ [target.'cfg(all(tokio_unstable, target_os = "linux"))'.dev-dependencies.backtrace]
+ version = "0.3.58"
+ 
+-[target.'cfg(any(not(target_family = "wasm"), all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
++[target.'cfg(any(not(all(target_family = "wasm", not(target_os = "kandelo"))), all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
+ version = "0.6.3"
+ features = ["all"]
+ optional = true
+@@ -922,16 +922,16 @@
+     "checkpoint",
+ ]
+ 
+-[target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dev-dependencies.rand]
++[target.'cfg(not(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown")))'.dev-dependencies.rand]
+ version = "0.9"
+ 
+-[target.'cfg(not(target_family = "wasm"))'.dev-dependencies.proptest]
++[target.'cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))'.dev-dependencies.proptest]
+ version = "1"
+ 
+-[target.'cfg(not(target_family = "wasm"))'.dev-dependencies.socket2]
++[target.'cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))'.dev-dependencies.socket2]
+ version = "0.6.0"
+ 
+-[target.'cfg(not(target_family = "wasm"))'.dev-dependencies.tempfile]
++[target.'cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))'.dev-dependencies.tempfile]
+ version = "3.1.0"
+ 
+ [target.'cfg(target_os = "freebsd")'.dev-dependencies.mio-aio]
+--- a/src/io/mod.rs
++++ b/src/io/mod.rs
+@@ -36,7 +36,7 @@
+ //! can do the same with [`tokio::fs::File`][`File`]:
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::io::{self, AsyncReadExt};
+ //! use tokio::fs::File;
+@@ -76,7 +76,7 @@
+ //! extra methods to any async reader:
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::io::{self, BufReader, AsyncBufReadExt};
+ //! use tokio::fs::File;
+@@ -101,7 +101,7 @@
+ //! [`BufWriter`] to ensure that any buffered data is written.
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::io::{self, BufWriter, AsyncWriteExt};
+ //! use tokio::fs::File;
+--- a/src/io/util/async_read_ext.rs
++++ b/src/io/util/async_read_ext.rs
+@@ -41,7 +41,7 @@
+     /// [`AsyncRead`].
+     ///
+     /// ```no_run
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::fs::File;
+     /// use tokio::io::{self, AsyncReadExt};
+@@ -75,7 +75,7 @@
+         /// [`File`][crate::fs::File]s implement `AsyncRead`:
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::fs::File;
+         /// use tokio::io::{self, AsyncReadExt};
+@@ -156,7 +156,7 @@
+         /// [`File`][crate::fs::File]s implement `Read`:
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::fs::File;
+         /// use tokio::io::{self, AsyncReadExt};
+@@ -228,7 +228,7 @@
+         /// [`BufMut`]: bytes::BufMut
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::fs::File;
+         /// use tokio::io::{self, AsyncReadExt};
+@@ -301,7 +301,7 @@
+         /// [`File`][crate::fs::File]s implement `Read`:
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::fs::File;
+         /// use tokio::io::{self, AsyncReadExt};
+@@ -1330,7 +1330,7 @@
+         /// [`File`][crate::fs::File]s implement `Read`:
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncReadExt};
+         /// use tokio::fs::File;
+@@ -1381,7 +1381,7 @@
+         /// [`File`][crate::fs::File]s implement `Read`:
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncReadExt};
+         /// use tokio::fs::File;
+@@ -1424,7 +1424,7 @@
+         /// [`File`][crate::fs::File]s implement `Read`:
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncReadExt};
+         /// use tokio::fs::File;
+--- a/src/io/util/async_seek_ext.rs
++++ b/src/io/util/async_seek_ext.rs
+@@ -46,7 +46,7 @@
+         /// # Examples
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::fs::File;
+         /// use tokio::io::{AsyncSeekExt, AsyncReadExt};
+--- a/src/io/util/async_write_ext.rs
++++ b/src/io/util/async_write_ext.rs
+@@ -44,7 +44,7 @@
+     /// [`AsyncWrite`].
+     ///
+     /// ```no_run
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::io::{self, AsyncWriteExt};
+     /// use tokio::fs::File;
+@@ -111,7 +111,7 @@
+         /// # Examples
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncWriteExt};
+         /// use tokio::fs::File;
+@@ -154,7 +154,7 @@
+         /// # Examples
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncWriteExt};
+         /// use tokio::fs::File;
+@@ -237,7 +237,7 @@
+         /// [`Cursor`]: std::io::Cursor
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncWriteExt};
+         /// use tokio::fs::File;
+@@ -311,7 +311,7 @@
+         /// [advanced]: bytes::Buf::advance
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncWriteExt};
+         /// use tokio::fs::File;
+@@ -367,7 +367,7 @@
+         /// # Examples
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, AsyncWriteExt};
+         /// use tokio::fs::File;
+@@ -1262,7 +1262,7 @@
+         /// # Examples
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, BufWriter, AsyncWriteExt};
+         /// use tokio::fs::File;
+@@ -1304,7 +1304,7 @@
+         /// # Examples
+         ///
+         /// ```no_run
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::io::{self, BufWriter, AsyncWriteExt};
+         /// use tokio::fs::File;
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -197,7 +197,7 @@
+ //! [`thread_keep_alive`]: crate::runtime::Builder::thread_keep_alive()
+ //!
+ //! ```
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! #[tokio::main]
+ //! async fn main() {
+@@ -272,7 +272,7 @@
+ //! A simple TCP echo server:
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::net::TcpListener;
+ //! use tokio::io::{AsyncReadExt, AsyncWriteExt};
+@@ -466,7 +466,7 @@
+ 
+ #[cfg(all(
+     not(tokio_unstable),
+-    target_family = "wasm",
++    all(target_family = "wasm", not(target_os = "kandelo")),
+     any(
+         feature = "fs",
+         feature = "io-std",
+--- a/src/loom/std/barrier.rs
++++ b/src/loom/std/barrier.rs
+@@ -12,7 +12,7 @@
+ /// # Examples
+ ///
+ /// ```
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use std::sync::{Arc, Barrier};
+ /// use std::thread;
+@@ -106,7 +106,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::sync::{Arc, Barrier};
+     /// use std::thread;
+--- a/src/macros/cfg.rs
++++ b/src/macros/cfg.rs
+@@ -715,7 +715,7 @@
+ macro_rules! cfg_is_wasm_not_wasi {
+     ($($item:item)*) => {
+         $(
+-            #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
++            #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+             $item
+         )*
+     }
+--- a/src/macros/join.rs
++++ b/src/macros/join.rs
+@@ -77,7 +77,7 @@
+         /// Using the `biased;` mode to control polling order.
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// async fn do_stuff_async() {
+         ///     // async work
+--- a/src/net/unix/ucred.rs
++++ b/src/net/unix/ucred.rs
+@@ -34,6 +34,7 @@
+ }
+ 
+ #[cfg(any(
++    target_os = "kandelo",
+     target_os = "linux",
+     target_os = "redox",
+     target_os = "android",
+@@ -79,6 +80,7 @@
+ pub(crate) use self::impl_nto::get_peer_cred;
+ 
+ #[cfg(any(
++    target_os = "kandelo",
+     target_os = "linux",
+     target_os = "redox",
+     target_os = "android",
+@@ -95,6 +97,7 @@
+     #[cfg(target_os = "openbsd")]
+     use libc::sockpeercred as ucred;
+     #[cfg(any(
++        target_os = "kandelo",
+         target_os = "linux",
+         target_os = "redox",
+         target_os = "android",
+--- a/src/runtime/builder.rs
++++ b/src/runtime/builder.rs
+@@ -35,7 +35,7 @@
+ /// # Examples
+ ///
+ /// ```
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use tokio::runtime::Builder;
+ ///
+@@ -174,7 +174,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime::{self, UnhandledPanic};
+         ///
+@@ -363,7 +363,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime;
+     ///
+@@ -410,7 +410,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime;
+     ///
+@@ -483,7 +483,7 @@
+     /// ## Multi threaded runtime with 4 threads
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime;
+     ///
+@@ -580,7 +580,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     ///
+@@ -602,7 +602,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     ///
+@@ -632,7 +632,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     /// # use std::sync::atomic::{AtomicUsize, Ordering};
+@@ -666,7 +666,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     ///
+@@ -690,7 +690,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     /// # pub fn main() {
+@@ -718,7 +718,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// {
+     /// # use tokio::runtime;
+     /// # pub fn main() {
+@@ -753,7 +753,7 @@
+     ///
+     /// ## Multithreaded executor
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use std::sync::Arc;
+     /// # use std::sync::atomic::{AtomicBool, Ordering};
+@@ -832,7 +832,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     /// # pub fn main() {
+@@ -923,7 +923,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use std::sync::{atomic::AtomicUsize, Arc};
+     /// # use tokio::task::yield_now;
+@@ -970,7 +970,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use std::sync::{atomic::AtomicUsize, Arc};
+     /// # use tokio::task::yield_now;
+@@ -1058,7 +1058,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Builder;
+     ///
+@@ -1132,7 +1132,7 @@
+     /// # Example
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     /// # use std::time::Duration;
+@@ -1174,7 +1174,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     /// # pub fn main() {
+@@ -1215,7 +1215,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use tokio::runtime;
+     /// # pub fn main() {
+@@ -1330,7 +1330,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         ///
+@@ -1403,7 +1403,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         ///
+@@ -1452,7 +1452,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime::{self, HistogramScale};
+         ///
+@@ -1479,7 +1479,7 @@
+         /// # Examples
+         /// Configure a [`LogHistogram`] with [default configuration]:
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         /// use tokio::runtime::{HistogramConfiguration, LogHistogram};
+@@ -1496,7 +1496,7 @@
+         ///
+         /// Configure a linear histogram with 100 buckets, each 10μs wide
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         /// use std::time::Duration;
+@@ -1517,7 +1517,7 @@
+         /// - Max error of 0.1
+         /// - No more than 1024 buckets
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use std::time::Duration;
+         /// use tokio::runtime;
+@@ -1586,7 +1586,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         /// use std::time::Duration;
+@@ -1624,7 +1624,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         ///
+@@ -1802,7 +1802,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         ///
+@@ -1890,7 +1890,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         ///
+@@ -1929,7 +1929,7 @@
+         /// # Examples
+         /// Configure a [`LogHistogram`] with [default configuration]:
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         /// use tokio::runtime::{HistogramConfiguration, LogHistogram};
+@@ -1946,7 +1946,7 @@
+         ///
+         /// Configure a linear histogram with 100 buckets, each 10μs wide
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime;
+         /// use std::time::Duration;
+@@ -1967,7 +1967,7 @@
+         /// - Max error of 0.1
+         /// - No more than 1024 buckets
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use std::time::Duration;
+         /// use tokio::runtime;
+--- a/src/runtime/config.rs
++++ b/src/runtime/config.rs
+@@ -1,5 +1,5 @@
+ #![cfg_attr(
+-    any(not(all(tokio_unstable, feature = "full")), target_family = "wasm"),
++    any(not(all(tokio_unstable, feature = "full")), all(target_family = "wasm", not(target_os = "kandelo"))),
+     allow(dead_code)
+ )]
+ use crate::runtime::{Callback, TaskCallback};
+--- a/src/runtime/driver.rs
++++ b/src/runtime/driver.rs
+@@ -3,7 +3,7 @@
+ // Eventually, this file will see significant refactoring / cleanup. For now, we
+ // don't need to worry much about dead code with certain feature permutations.
+ #![cfg_attr(
+-    any(not(all(tokio_unstable, feature = "full")), target_family = "wasm"),
++    any(not(all(tokio_unstable, feature = "full")), all(target_family = "wasm", not(target_os = "kandelo"))),
+     allow(dead_code)
+ )]
+ 
+--- a/src/runtime/handle.rs
++++ b/src/runtime/handle.rs
+@@ -51,7 +51,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -108,7 +108,7 @@
+     /// block or function running on that runtime.
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// # use std::thread;
+     /// # use tokio::runtime::Runtime;
+@@ -176,7 +176,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -213,7 +213,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -272,7 +272,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -292,7 +292,7 @@
+     /// Or using `Handle::current`:
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Handle;
+     ///
+@@ -312,7 +312,7 @@
+     /// `Handle::block_on` may be combined with [`task::block_in_place`] to
+     /// re-enter the async context of a multi-thread scheduler runtime:
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::task;
+     /// use tokio::runtime::Handle;
+@@ -448,7 +448,7 @@
+     /// ```
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::{Handle, RuntimeFlavor};
+     ///
+--- a/src/runtime/id.rs
++++ b/src/runtime/id.rs
+@@ -16,7 +16,7 @@
+ /// # Examples
+ ///
+ /// ```
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use tokio::runtime::Handle;
+ ///
+--- a/src/runtime/local_runtime/runtime.rs
++++ b/src/runtime/local_runtime/runtime.rs
+@@ -317,7 +317,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::LocalRuntime;
+     /// use tokio::task;
+--- a/src/runtime/metrics/histogram/h2_histogram.rs
++++ b/src/runtime/metrics/histogram/h2_histogram.rs
+@@ -302,7 +302,7 @@
+     use crate::runtime::metrics::histogram::h2_histogram::LogHistogram;
+     use crate::runtime::metrics::histogram::HistogramType;
+ 
+-    #[cfg(not(target_family = "wasm"))]
++    #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     mod proptests {
+         use super::*;
+         use crate::runtime::metrics::batch::duration_as_u64;
+--- a/src/runtime/metrics/runtime.rs
++++ b/src/runtime/metrics/runtime.rs
+@@ -256,7 +256,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime::Handle;
+         ///
+@@ -289,7 +289,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// use tokio::runtime::Handle;
+         ///
+--- a/src/runtime/mod.rs
++++ b/src/runtime/mod.rs
+@@ -65,7 +65,7 @@
+ //! used.
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::net::TcpListener;
+ //! use tokio::io::{AsyncReadExt, AsyncWriteExt};
+@@ -111,7 +111,7 @@
+ //! A [`Runtime`] instance can also be used directly.
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::net::TcpListener;
+ //! use tokio::io::{AsyncReadExt, AsyncWriteExt};
+@@ -170,7 +170,7 @@
+ //! for most applications. The multi-thread scheduler requires the `rt-multi-thread`
+ //! feature flag, and is selected by default:
+ //! ```
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::runtime;
+ //!
+@@ -410,7 +410,7 @@
+ 
+ // At the top due to macros
+ #[cfg(test)]
+-#[cfg(not(target_family = "wasm"))]
++#[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ #[macro_use]
+ mod tests;
+ 
+@@ -581,7 +581,7 @@
+         /// # Examples
+         ///
+         /// ```
+-        /// # #[cfg(not(target_family = "wasm"))]
++        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+         /// # {
+         /// #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
+         /// async fn main() {
+--- a/src/runtime/park.rs
++++ b/src/runtime/park.rs
+@@ -153,14 +153,14 @@
+             Err(actual) => panic!("inconsistent park_timeout state; actual = {actual}"),
+         }
+ 
+-        #[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
++        #[cfg(not(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_feature = "atomics"))))]
+         // Wait with a timeout, and if we spuriously wake up or otherwise wake up
+         // from a notification, we just want to unconditionally set the state back to
+         // empty, either consuming a notification or un-flagging ourselves as
+         // parked.
+         let (_m, _result) = self.condvar.wait_timeout(m, dur).unwrap();
+ 
+-        #[cfg(all(target_family = "wasm", not(target_feature = "atomics")))]
++        #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_feature = "atomics")))]
+         // Wasm without atomics doesn't have threads, so just sleep.
+         {
+             let _m = m;
+--- a/src/runtime/runtime.rs
++++ b/src/runtime/runtime.rs
+@@ -186,7 +186,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -220,7 +220,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -256,7 +256,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -321,7 +321,7 @@
+     /// # Examples
+     ///
+     /// ```no_run
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -390,7 +390,7 @@
+     /// # Example
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     /// use tokio::task::JoinHandle;
+@@ -428,7 +428,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     /// use tokio::task;
+@@ -471,7 +471,7 @@
+     /// This function is equivalent to calling `shutdown_timeout(Duration::from_nanos(0))`.
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     ///
+@@ -554,7 +554,7 @@
+ /// # Examples
+ ///
+ /// ```
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use tokio::runtime::Runtime;
+ /// use tokio::net::TcpListener;
+--- a/src/runtime/scheduler/inject/synced.rs
++++ b/src/runtime/scheduler/inject/synced.rs
+@@ -1,5 +1,5 @@
+ #![cfg_attr(
+-    any(not(all(tokio_unstable, feature = "full")), target_family = "wasm"),
++    any(not(all(tokio_unstable, feature = "full")), all(target_family = "wasm", not(target_os = "kandelo"))),
+     allow(dead_code)
+ )]
+ 
+--- a/src/runtime/task/error.rs
++++ b/src/runtime/task/error.rs
+@@ -46,7 +46,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::panic;
+     ///
+--- a/src/runtime/task/join.rs
++++ b/src/runtime/task/join.rs
+@@ -110,7 +110,7 @@
+     /// If the task panics, the error is a [`JoinError`] that contains the panic:
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::task;
+     /// use std::io;
+--- a/src/runtime/task/mod.rs
++++ b/src/runtime/task/mod.rs
+@@ -532,7 +532,7 @@
+ impl<S: Schedule> UnownedTask<S> {
+     // Used in test of the inject queue.
+     #[cfg(test)]
+-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
++    #[cfg_attr(all(target_family = "wasm", not(target_os = "kandelo")), allow(dead_code))]
+     pub(super) fn into_notified(self) -> Notified<S> {
+         Notified(self.into_task())
+     }
+--- a/src/sync/broadcast.rs
++++ b/src/sync/broadcast.rs
+@@ -1560,7 +1560,7 @@
+     ///
+     /// # Examples
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::thread;
+     /// use tokio::sync::broadcast;
+--- a/src/sync/mod.rs
++++ b/src/sync/mod.rs
+@@ -141,7 +141,7 @@
+ //! passing.
+ //!
+ //! ```no_run
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::io::{self, AsyncWriteExt};
+ //! use tokio::net::TcpStream;
+--- a/src/sync/mpsc/bounded.rs
++++ b/src/sync/mpsc/bounded.rs
+@@ -396,7 +396,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::thread;
+     /// use tokio::runtime::Runtime;
+@@ -1020,7 +1020,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::thread;
+     /// use tokio::runtime::Runtime;
+--- a/src/sync/mpsc/unbounded.rs
++++ b/src/sync/mpsc/unbounded.rs
+@@ -297,7 +297,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::thread;
+     /// use tokio::sync::mpsc;
+@@ -458,7 +458,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::task::{Context, Poll};
+     /// use std::pin::Pin;
+--- a/src/sync/mutex.rs
++++ b/src/sync/mutex.rs
+@@ -484,7 +484,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::sync::Arc;
+     /// use tokio::sync::Mutex;
+@@ -543,7 +543,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::sync::Arc;
+     /// use tokio::sync::Mutex;
+--- a/src/sync/oneshot.rs
++++ b/src/sync/oneshot.rs
+@@ -1216,7 +1216,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::thread;
+     /// use tokio::sync::oneshot;
+--- a/src/sync/rwlock.rs
++++ b/src/sync/rwlock.rs
+@@ -494,7 +494,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::sync::Arc;
+     /// use tokio::sync::RwLock;
+@@ -840,7 +840,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::sync::Arc;
+     /// use tokio::{sync::RwLock};
+--- a/src/sync/semaphore.rs
++++ b/src/sync/semaphore.rs
+@@ -90,7 +90,7 @@
+ /// file, the program will wait until a permit becomes available before
+ /// proceeding to open another file.
+ /// ```
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use std::io::Result;
+ /// use tokio::fs::File;
+@@ -176,7 +176,7 @@
+ /// (Since our semaphore is not a global variable — if it was, then `acquire` would be enough.)
+ ///
+ /// ```no_run
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use std::sync::Arc;
+ /// use tokio::sync::Semaphore;
+--- a/src/sync/tests/atomic_waker.rs
++++ b/src/sync/tests/atomic_waker.rs
+@@ -15,7 +15,7 @@
+ impl AssertSend for Waker {}
+ impl AssertSync for Waker {}
+ 
+-#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
++#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+ use wasm_bindgen_test::wasm_bindgen_test as test;
+ 
+ #[test]
+@@ -40,7 +40,7 @@
+ }
+ 
+ #[test]
+-#[cfg_attr(target_family = "wasm", ignore)] // threads not supported
++#[cfg_attr(all(target_family = "wasm", not(target_os = "kandelo")), ignore)] // threads not supported
+ fn failed_wake_synchronizes() {
+     for _ in 0..1000 {
+         failed_wake_synchronizes_inner();
+@@ -73,7 +73,7 @@
+ 
+ #[cfg(panic = "unwind")]
+ #[test]
+-#[cfg(not(target_family = "wasm"))] // wasm currently doesn't support unwinding
++#[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))] // wasm currently doesn't support unwinding
+ fn atomic_waker_panic_safe() {
+     use std::panic;
+     use std::ptr;
+--- a/src/sync/tests/notify.rs
++++ b/src/sync/tests/notify.rs
+@@ -3,7 +3,7 @@
+ use std::sync::Arc;
+ use std::task::{Context, RawWaker, RawWakerVTable, Waker};
+ 
+-#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
++#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+ use wasm_bindgen_test::wasm_bindgen_test as test;
+ 
+ #[test]
+@@ -103,7 +103,7 @@
+ }
+ 
+ #[test]
+-#[cfg(not(target_family = "wasm"))]
++#[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ fn watch_test() {
+     let rt = crate::runtime::Builder::new_current_thread()
+         .build()
+--- a/src/sync/tests/semaphore_batch.rs
++++ b/src/sync/tests/semaphore_batch.rs
+@@ -3,7 +3,7 @@
+ 
+ const MAX_PERMITS: usize = crate::sync::Semaphore::MAX_PERMITS;
+ 
+-#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
++#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+ use wasm_bindgen_test::wasm_bindgen_test as test;
+ 
+ #[test]
+@@ -177,7 +177,7 @@
+ 
+ #[test]
+ #[should_panic]
+-#[cfg(not(target_family = "wasm"))] // wasm currently doesn't support unwinding
++#[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))] // wasm currently doesn't support unwinding
+ fn validates_max_permits() {
+     Semaphore::new(MAX_PERMITS + 1);
+ }
+--- a/src/task/coop/mod.rs
++++ b/src/task/coop/mod.rs
+@@ -496,7 +496,7 @@
+ mod test {
+     use super::*;
+ 
+-    #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
++    #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+     use wasm_bindgen_test::wasm_bindgen_test as test;
+ 
+     fn get() -> Budget {
+--- a/src/task/join_set.rs
++++ b/src/task/join_set.rs
+@@ -220,7 +220,7 @@
+     /// Spawn multiple blocking tasks and wait for them.
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::task::JoinSet;
+     ///
+@@ -656,7 +656,7 @@
+ /// # Examples
+ ///
+ /// ```
+-/// # #[cfg(not(target_family = "wasm"))]
++/// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ /// # {
+ /// use tokio::task::JoinSet;
+ ///
+--- a/src/task/local.rs
++++ b/src/task/local.rs
+@@ -132,7 +132,7 @@
+     ///
+     /// The following example puts the `LocalSet` inside a new thread.
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Builder;
+     /// use tokio::sync::{mpsc, oneshot};
+@@ -644,7 +644,7 @@
+     /// ```
+     /// This, however, will not panic:
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime::Runtime;
+     /// use tokio::task;
+--- a/src/task/mod.rs
++++ b/src/task/mod.rs
+@@ -91,7 +91,7 @@
+ //! example:
+ //!
+ //! ```
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::task;
+ //!
+@@ -225,7 +225,7 @@
+ //! For example:
+ //!
+ //! ```
+-//! # #[cfg(not(target_family = "wasm"))]
++//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+ //! # {
+ //! use tokio::task;
+ //!
+--- a/src/task/spawn.rs
++++ b/src/task/spawn.rs
+@@ -40,7 +40,7 @@
+     /// that processes each received connection.
+     ///
+     /// ```no_run
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::net::{TcpListener, TcpStream};
+     ///

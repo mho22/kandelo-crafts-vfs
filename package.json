@@ -1,0 +1,7 @@
+{
+	"scripts" : {
+		"build" : "bash scripts/build.sh",
+		"vfs" : "node scripts/vfs.ts"
+	},
+	"type" : "module"
+}

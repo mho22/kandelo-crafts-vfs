@@ -1,0 +1,123 @@
+# egui-wgpu 0.36.2: target_arch = "wasm32" means the browser here; Kandelo takes
+# the native path. Every such cfg reads
+# all(target_arch = "wasm32", not(target_os = "kandelo")).
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-08 18:09:38
++++ b/src/lib.rs	2026-10-08 18:09:38
+@@ -112,7 +112,7 @@
+     ///
+     /// This is not available on web.
+     /// On web, we always select WebGPU is available, then fall back to WebGL if not.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub available_adapters: Vec<wgpu::Adapter>,
+ 
+     /// Wgpu instance used for creating surfaces and adapters.
+@@ -157,7 +157,7 @@
+         })
+         .await
+         .inspect_err(|_err| {
+-            if cfg!(target_arch = "wasm32") {
++            if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+                 // Nothing to add here
+             } else if available_adapters.is_empty() {
+                 if std::env::var("DYLD_LIBRARY_PATH").is_ok() {
+@@ -210,7 +210,7 @@
+         profiling::scope!("RenderState::create"); // async yield give bad names using `profile_function`
+ 
+         // This is always an empty list on web.
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         let available_adapters = {
+             let backends = if let WgpuSetup::CreateNew(create_new) = &config.wgpu_setup {
+                 create_new.instance_descriptor.backends
+@@ -230,11 +230,11 @@
+                 device_descriptor,
+             }) => {
+                 let adapter = {
+-                    #[cfg(target_arch = "wasm32")]
++                    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+                     {
+                         request_adapter(instance, power_preference, compatible_surface, &[]).await
+                     }
+-                    #[cfg(not(target_arch = "wasm32"))]
++                    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+                     if let Some(native_adapter_selector) = _native_adapter_selector {
+                         native_adapter_selector(&available_adapters, compatible_surface)
+                             .map_err(WgpuError::CustomNativeAdapterSelectionError)
+@@ -285,7 +285,7 @@
+         Ok(Self {
+             instance,
+             adapter,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             available_adapters,
+             device,
+             queue,
+@@ -500,7 +500,7 @@
+         write!(summary, ", driver_info: {driver_info:?}").ok();
+     }
+     if *vendor != 0 {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             write!(
+                 summary,
+@@ -509,7 +509,7 @@
+             )
+             .ok();
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         {
+             write!(summary, ", vendor: 0x{vendor:04X}").ok();
+         }
+@@ -538,7 +538,7 @@
+ }
+ 
+ /// Tries to parse the adapter's vendor ID to a human-readable string.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn parse_vendor_id(vendor_id: u32) -> &'static str {
+     match vendor_id {
+         wgpu::hal::auxil::db::amd::VENDOR => "AMD",
+diff -ruN a/src/renderer.rs b/src/renderer.rs
+--- a/src/renderer.rs	2026-10-08 18:09:38
++++ b/src/renderer.rs	2026-10-08 18:09:38
+@@ -9,13 +9,13 @@
+ 
+ // Only implements Send + Sync on wasm32 in order to allow storing wgpu resources on the type map.
+ #[cfg(not(all(
+-    target_arch = "wasm32",
++    all(target_arch = "wasm32", not(target_os = "kandelo")),
+     not(feature = "fragile-send-sync-non-atomic-wasm"),
+ )))]
+ /// You can use this for storage when implementing [`CallbackTrait`].
+ pub type CallbackResources = type_map::concurrent::TypeMap;
+ #[cfg(all(
+-    target_arch = "wasm32",
++    all(target_arch = "wasm32", not(target_os = "kandelo")),
+     not(feature = "fragile-send-sync-non-atomic-wasm"),
+ ))]
+ /// You can use this for storage when implementing [`CallbackTrait`].
+@@ -1168,7 +1168,7 @@
+ 
+ // Look at the feature flag for an explanation.
+ #[cfg(not(all(
+-    target_arch = "wasm32",
++    all(target_arch = "wasm32", not(target_os = "kandelo")),
+     not(feature = "fragile-send-sync-non-atomic-wasm"),
+ )))]
+ #[test]
+diff -ruN a/src/setup.rs b/src/setup.rs
+--- a/src/setup.rs	2026-10-08 18:09:38
++++ b/src/setup.rs	2026-10-08 18:09:38
+@@ -104,7 +104,7 @@
+                 // Emscripten is excluded: wgpu gates both its `webgpu` backend and
+                 // its `web_sys` re-export on `not(Emscripten)` (see the cfg aliases
+                 // in `wgpu/build.rs`).
+-                #[cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))]
++                #[cfg(all(all(target_arch = "wasm32", not(target_os = "kandelo")), not(target_os = "emscripten")))]
+                 if backends.contains(wgpu::Backends::BROWSER_WEBGPU) {
+                     let is_secure_context =
+                         wgpu::web_sys::window().is_some_and(|w| w.is_secure_context());

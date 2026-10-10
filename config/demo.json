@@ -1,0 +1,33 @@
+{
+	"version" : 1,
+	"profiles" : {
+		"photocraft" : {
+			"identity" : {
+				"title" : "PhotoCraft",
+				"summary" : "PhotoCraft, an open-source image editor in Rust, alone on a Wayland compositor. It is an eframe app (egui on winit's Wayland backend) that renders through wgpu's OpenGL ES backend, which libEGL and libGLESv2 carry to the browser's WebGL2.",
+				"accent" : "#3a7d7b",
+				"glyph" : "P"
+			},
+			"runtime" : {
+				"features" : [ "kms", "kms-gl-scanout", "evdev-input" ]
+			},
+			"init" : {
+				"program" : "/usr/local/bin/wlcompositor",
+				"args" : [ "/usr/local/bin/photocraft" ],
+				"uid" : 0,
+				"gid" : 0
+			},
+			"display" : {
+				"minWidth" : 1920,
+				"minHeight" : 1080
+			},
+			"presentation" : {
+				"bootPrimary" : "syslog",
+				"runningPrimary" : [ "kms", "terminal", "syslog" ],
+				"terminalAccess" : "drawer",
+				"internalsAccess" : "drawer",
+				"hostPointer" : true
+			}
+		}
+	}
+}

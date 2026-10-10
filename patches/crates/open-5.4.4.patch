@@ -1,0 +1,57 @@
+# open 5.4.4: Kandelo is a Unix with xdg-open semantics; without it in the
+# platform list the crate stops with compile_error!.
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2026-10-08 18:09:38
++++ b/Cargo.toml	2026-10-08 18:09:38
+@@ -52,7 +52,7 @@
+ test = false
+ doc = false
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "illumos", target_os = "solaris", target_os = "aix", target_os = "hurd"))'.dependencies.is-wsl]
++[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd", target_os = "illumos", target_os = "solaris", target_os = "aix", target_os = "hurd", target_os = "kandelo"))'.dependencies.is-wsl]
+ version = "0.4.0"
+ 
+ [target."cfg(unix)".dependencies.libc]
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-08 18:09:38
++++ b/src/lib.rs	2026-10-08 18:09:38
+@@ -125,7 +125,8 @@
+     target_os = "illumos",
+     target_os = "solaris",
+     target_os = "aix",
+-    target_os = "hurd"
++    target_os = "hurd",
++    target_os = "kandelo"
+ ))]
+ use unix as os;
+ 
+@@ -145,7 +146,8 @@
+     target_os = "haiku",
+     target_os = "redox",
+     target_os = "aix",
+-    target_os = "hurd"
++    target_os = "hurd",
++    target_os = "kandelo"
+ )))]
+ compile_error!("open is not supported on this platform");
+ 
+@@ -451,7 +453,8 @@
+     target_os = "illumos",
+     target_os = "solaris",
+     target_os = "aix",
+-    target_os = "hurd"
++    target_os = "hurd",
++    target_os = "kandelo"
+ ))]
+ mod wsl;
+ 
+@@ -465,7 +468,8 @@
+     target_os = "illumos",
+     target_os = "solaris",
+     target_os = "aix",
+-    target_os = "hurd"
++    target_os = "hurd",
++    target_os = "kandelo"
+ ))]
+ mod unix;
+ 

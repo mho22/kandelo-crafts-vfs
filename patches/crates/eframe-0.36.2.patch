@@ -1,0 +1,641 @@
+# eframe 0.36.2: target_arch = "wasm32" means the browser (web-sys) here;
+# Kandelo takes the native path (winit + egui-wgpu). Every such cfg reads
+# all(target_arch = "wasm32", not(target_os = "kandelo")).
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2026-10-08 18:09:38
++++ b/Cargo.toml	2026-10-08 18:09:38
+@@ -222,7 +222,7 @@
+     "Win32_UI_WindowsAndMessaging",
+ ]
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.egui-wgpu]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.egui-wgpu]
+ version = "0.36.2"
+ features = [
+     "winit",
+@@ -231,12 +231,12 @@
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.egui-winit]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.egui-winit]
+ version = "0.36.2"
+ features = ["clipboard"]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.glutin]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.glutin]
+ version = "0.32.3"
+ features = [
+     "egl",
+@@ -245,7 +245,7 @@
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.glutin-winit]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.glutin-winit]
+ version = "0.5.0"
+ features = [
+     "egl",
+@@ -254,47 +254,47 @@
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.image]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.image]
+ version = "0.25.6"
+ features = ["png"]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.pollster]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.pollster]
+ version = "1.0"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.winit]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies.winit]
+ version = "0.30.13"
+ features = ["rwh_06"]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.directories]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dev-dependencies.directories]
+ version = "6.0"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.bytemuck]
+ version = "1.25"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.egui-wgpu]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.egui-wgpu]
+ version = "0.36.2"
+ features = ["capture"]
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.image]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.image]
+ version = "0.25.6"
+ features = ["png"]
+ default-features = false
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.js-sys]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.js-sys]
+ version = "0.3.103"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.percent-encoding]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.percent-encoding]
+ version = "2.3"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wasm-bindgen]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.wasm-bindgen]
+ version = "0.2.126"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.web-sys]
+ version = "0.3.103"
+ features = [
+     "AddEventListenerOptions",
+@@ -353,7 +353,7 @@
+     "Window",
+ ]
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wgpu]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.wgpu]
+ version = "30.0"
+ features = ["std"]
+ optional = true
+diff -ruN a/src/epi.rs b/src/epi.rs
+--- a/src/epi.rs	2026-10-08 18:09:38
++++ b/src/epi.rs	2026-10-08 18:09:38
+@@ -6,22 +6,22 @@
+ 
+ #![warn(missing_docs)] // Let's keep `epi` well-documented.
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ use core::any::Any;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub use crate::native::winit_integration::UserEvent;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use raw_window_handle::{
+     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+     RawWindowHandle, WindowHandle,
+ };
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use static_assertions::assert_not_impl_any;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub use winit::{event_loop::EventLoopBuilder, window::WindowAttributes};
+ 
+@@ -29,7 +29,7 @@
+ ///
+ /// You can configure any platform specific details required on top of the default configuration
+ /// done by `EFrame`.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub type EventLoopBuilderHook = Box<dyn FnOnce(&mut EventLoopBuilder<UserEvent>)>;
+ 
+@@ -37,7 +37,7 @@
+ ///
+ /// You can configure any platform specific details required on top of the default configuration
+ /// done by `eframe`.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub type WindowBuilderHook = Box<dyn FnOnce(egui::ViewportBuilder) -> egui::ViewportBuilder>;
+ 
+@@ -84,20 +84,20 @@
+     pub wgpu_render_state: Option<egui_wgpu::RenderState>,
+ 
+     /// The root [`winit::window::Window`].
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) window: Option<std::sync::Arc<winit::window::Window>>,
+ 
+     /// Raw platform window handle
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) raw_window_handle: Result<RawWindowHandle, HandleError>,
+ 
+     /// Raw platform display handle for window
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) raw_display_handle: Result<RawDisplayHandle, HandleError>,
+ }
+ 
+ #[expect(unsafe_code)]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl HasWindowHandle for CreationContext<'_> {
+     fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+         // Safety: the lifetime is correct.
+@@ -106,7 +106,7 @@
+ }
+ 
+ #[expect(unsafe_code)]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl HasDisplayHandle for CreationContext<'_> {
+     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+         // Safety: the lifetime is correct.
+@@ -128,11 +128,11 @@
+             get_proc_address: None,
+             #[cfg(feature = "wgpu_no_default_features")]
+             wgpu_render_state: None,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             window: None,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             raw_window_handle: Err(HandleError::NotSupported),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             raw_display_handle: Err(HandleError::NotSupported),
+         }
+     }
+@@ -140,7 +140,7 @@
+     /// Access to the root [`winit::window::Window`].
+     ///
+     /// `None` for headless (tests etc).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn winit_window(&self) -> Option<&std::sync::Arc<winit::window::Window>> {
+         self.window.as_ref()
+     }
+@@ -191,12 +191,12 @@
+     ///
+     /// Just copy-paste this as your implementation:
+     /// ```ignore
+-    /// #[cfg(target_arch = "wasm32")]
++    /// #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     /// fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+     ///     Some(&mut *self)
+     /// }
+     /// ```
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+         None
+     }
+@@ -292,7 +292,7 @@
+ ///
+ /// If you don't set an app id, the title argument to [`crate::run_native`]
+ /// will be used as app id instead.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub struct NativeOptions {
+     /// Controls the native window of the root viewport.
+     ///
+@@ -402,7 +402,7 @@
+     pub android_app: Option<winit::platform::android::activity::AndroidApp>,
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl Clone for NativeOptions {
+     fn clone(&self) -> Self {
+         Self {
+@@ -430,7 +430,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl Default for NativeOptions {
+     fn default() -> Self {
+         Self {
+@@ -475,7 +475,7 @@
+ // ----------------------------------------------------------------------------
+ 
+ /// Options when using `eframe` in a web page.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub struct WebOptions {
+     /// What rendering backend to use.
+     #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+@@ -529,7 +529,7 @@
+     pub max_fps: Option<u32>,
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ impl Default for WebOptions {
+     fn default() -> Self {
+         Self {
+@@ -670,7 +670,7 @@
+     pub(crate) gl: Option<std::sync::Arc<glow::Context>>,
+ 
+     /// Used to convert user custom [`glow::Texture`] to [`egui::TextureId`]
+-    #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++    #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+     pub(crate) glow_register_native_texture:
+         Option<Box<dyn FnMut(glow::Texture) -> egui::TextureId>>,
+ 
+@@ -680,24 +680,24 @@
+     pub wgpu_render_state: Option<egui_wgpu::RenderState>,
+ 
+     /// The current [`winit::window::Window`] (i.e. the one the active viewport is rendered to).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) window: Option<std::sync::Arc<winit::window::Window>>,
+ 
+     /// Raw platform window handle
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) raw_window_handle: Result<RawWindowHandle, HandleError>,
+ 
+     /// Raw platform display handle for window
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) raw_display_handle: Result<RawDisplayHandle, HandleError>,
+ }
+ 
+ // Implementing `Clone` would violate the guarantees of `HasWindowHandle` and `HasDisplayHandle`.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ assert_not_impl_any!(Frame: Clone);
+ 
+ #[expect(unsafe_code)]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl HasWindowHandle for Frame {
+     fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+         // Safety: the lifetime is correct.
+@@ -706,7 +706,7 @@
+ }
+ 
+ #[expect(unsafe_code)]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl HasDisplayHandle for Frame {
+     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+         // Safety: the lifetime is correct.
+@@ -721,14 +721,14 @@
+         Self {
+             #[cfg(feature = "glow")]
+             gl: None,
+-            #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++            #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+             glow_register_native_texture: None,
+             info: IntegrationInfo::mock(),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             raw_display_handle: Err(HandleError::NotSupported),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             raw_window_handle: Err(HandleError::NotSupported),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             window: None,
+             storage: None,
+             #[cfg(feature = "wgpu_no_default_features")]
+@@ -738,10 +738,10 @@
+ 
+     /// True if you are in a web environment.
+     ///
+-    /// Equivalent to `cfg!(target_arch = "wasm32")`
++    /// Equivalent to `cfg!(all(target_arch = "wasm32", not(target_os = "kandelo")))`
+     #[expect(clippy::unused_self)]
+     pub fn is_web(&self) -> bool {
+-        cfg!(target_arch = "wasm32")
++        cfg!(all(target_arch = "wasm32", not(target_os = "kandelo")))
+     }
+ 
+     /// Information about the integration.
+@@ -762,7 +762,7 @@
+     /// Access to the current [`winit::window::Window`] (i.e. the one the active viewport is rendered to).
+     ///
+     /// `None` for headless (tests etc).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn winit_window(&self) -> Option<&std::sync::Arc<winit::window::Window>> {
+         self.window.as_ref()
+     }
+@@ -788,7 +788,7 @@
+     /// and then you can use the returned [`egui::TextureId`] to render your texture with [`egui`].
+     ///
+     /// This function will take the ownership of your [`glow::Texture`], so please do not delete your [`glow::Texture`] after registering.
+-    #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++    #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+     pub fn register_native_glow_texture(&mut self, native: glow::Texture) -> egui::TextureId {
+         #[expect(clippy::unwrap_used)]
+         self.glow_register_native_texture.as_mut().unwrap()(native)
+@@ -829,7 +829,7 @@
+ 
+ /// Information about the web environment (if applicable).
+ #[derive(Clone, Debug)]
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub struct WebInfo {
+     /// The browser user agent.
+     pub user_agent: String,
+@@ -841,7 +841,7 @@
+ /// Information about the URL.
+ ///
+ /// Everything has been percent decoded (`%20` -> ` ` etc).
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ #[derive(Clone, Debug)]
+ pub struct Location {
+     /// The full URL (`location.href`) without the hash, percent-decoded.
+@@ -897,7 +897,7 @@
+ #[derive(Clone, Debug)]
+ pub struct IntegrationInfo {
+     /// Information about the surrounding web environment.
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     pub web_info: WebInfo,
+ 
+     /// Seconds of cpu usage (in seconds) on the previous frame.
+@@ -913,7 +913,7 @@
+ impl IntegrationInfo {
+     fn mock() -> Self {
+         Self {
+-            #[cfg(target_arch = "wasm32")]
++            #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+             web_info: WebInfo {
+                 user_agent: "kittest".to_owned(),
+                 location: Location {
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-08 18:09:38
++++ b/src/lib.rs	2026-10-08 18:09:38
+@@ -54,18 +54,18 @@
+ //!
+ //! ## Usage, web:
+ //! ``` no_run
+-//! # #[cfg(target_arch = "wasm32")]
++//! # #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ //! use wasm_bindgen::prelude::*;
+ //!
+ //! /// Your handle to the web app from JavaScript.
+-//! # #[cfg(target_arch = "wasm32")]
++//! # #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ //! #[derive(Clone)]
+ //! #[wasm_bindgen]
+ //! pub struct WebHandle {
+ //!     runner: eframe::WebRunner,
+ //! }
+ //!
+-//! # #[cfg(target_arch = "wasm32")]
++//! # #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ //! #[wasm_bindgen]
+ //! impl WebHandle {
+ //!     /// Installs a panic hook, then returns.
+@@ -171,48 +171,48 @@
+ // ----------------------------------------------------------------------------
+ // When compiling for web
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub use wasm_bindgen;
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub use web_sys;
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub mod web;
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub use web::{WebLogger, WebRunner};
+ 
+ // ----------------------------------------------------------------------------
+ // When compiling natively
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ mod native;
+ 
+ #[cfg(target_os = "macos")]
+ pub use native::macos::WindowChromeMetrics;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub use native::run::EframeWinitApplication;
+ 
+-#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
++#[cfg(not(any(all(target_arch = "wasm32", not(target_os = "kandelo")), target_os = "ios")))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub use native::run::EframePumpStatus;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ #[cfg(feature = "persistence")]
+ pub use native::file_storage::storage_dir;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub mod icon_data;
+ 
+ // ----------------------------------------------------------------------------
+ 
+ /// Attach an [`egui_inspection::InspectionPlugin`] to `ctx` when enabled via the environment.
+-#[cfg(all(feature = "inspection", not(target_arch = "wasm32")))]
++#[cfg(all(feature = "inspection", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ pub(crate) fn maybe_attach_inspection_plugin(ctx: &egui::Context, label: Option<String>) {
+     match egui_inspection::attach_from_env(ctx, label) {
+         Ok(true) => log::info!("egui_inspection plugin attached"),
+@@ -225,7 +225,7 @@
+ /// var was set.
+ #[cfg(all(
+     not(feature = "inspection"),
+-    not(target_arch = "wasm32"),
++    not(all(target_arch = "wasm32", not(target_os = "kandelo"))),
+     any(feature = "glow", feature = "wgpu_no_default_features")
+ ))]
+ pub(crate) fn maybe_attach_inspection_plugin(_ctx: &egui::Context, _label: Option<String>) {
+@@ -282,7 +282,7 @@
+ ///
+ /// # Errors
+ /// This function can fail if we fail to set up a graphics context.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ #[allow(clippy::allow_attributes, clippy::needless_pass_by_value)]
+ pub fn run_native(
+@@ -300,7 +300,7 @@
+ ///
+ /// # Errors
+ /// This function can fail if we fail to set up a graphics context.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ #[allow(clippy::allow_attributes, clippy::needless_pass_by_value)]
+ pub fn run_native_ext(
+@@ -371,7 +371,7 @@
+ /// ```
+ ///
+ /// See the `external_eventloop` example for a more complete example.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub fn create_native<'a>(
+     app_name: &str,
+@@ -406,7 +406,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ fn init_native(app_name: &str, native_options: &mut NativeOptions) -> Renderer {
+     #[cfg(not(feature = "__screenshot"))]
+@@ -473,7 +473,7 @@
+ ///
+ /// # Errors
+ /// This function can fail if we fail to set up a graphics context.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
+ pub fn run_ui_native(
+     app_name: &str,
+@@ -506,19 +506,19 @@
+     AppCreation(Box<dyn core::error::Error + Send + Sync>),
+ 
+     /// An error from [`winit`].
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     Winit(winit::error::OsError),
+ 
+     /// An error from [`winit::event_loop::EventLoop`].
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     WinitEventLoop(winit::error::EventLoopError),
+ 
+     /// An error from [`glutin`] when using [`glow`].
+-    #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++    #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+     Glutin(glutin::error::Error),
+ 
+     /// An error from [`glutin`] when using [`glow`].
+-    #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++    #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+     NoGlutinConfigs(glutin::config::ConfigTemplate, Box<dyn core::error::Error>),
+ 
+     /// An error from [`glutin`] when using [`glow`].
+@@ -532,7 +532,7 @@
+ 
+ impl core::error::Error for Error {}
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl From<winit::error::OsError> for Error {
+     #[inline]
+     fn from(err: winit::error::OsError) -> Self {
+@@ -540,7 +540,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl From<winit::error::EventLoopError> for Error {
+     #[inline]
+     fn from(err: winit::error::EventLoopError) -> Self {
+@@ -548,7 +548,7 @@
+     }
+ }
+ 
+-#[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++#[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ impl From<glutin::error::Error> for Error {
+     #[inline]
+     fn from(err: glutin::error::Error) -> Self {
+@@ -577,22 +577,22 @@
+         match self {
+             Self::AppCreation(err) => write!(f, "app creation error: {err}"),
+ 
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             Self::Winit(err) => {
+                 write!(f, "winit error: {err}")
+             }
+ 
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             Self::WinitEventLoop(err) => {
+                 write!(f, "winit EventLoopError: {err}")
+             }
+ 
+-            #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++            #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+             Self::Glutin(err) => {
+                 write!(f, "glutin error: {err}")
+             }
+ 
+-            #[cfg(all(feature = "glow", not(target_arch = "wasm32")))]
++            #[cfg(all(feature = "glow", not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+             Self::NoGlutinConfigs(template, err) => {
+                 write!(
+                     f,
+diff -ruN a/src/web/web_painter_wgpu.rs b/src/web/web_painter_wgpu.rs
+--- a/src/web/web_painter_wgpu.rs	2026-10-08 18:09:38
++++ b/src/web/web_painter_wgpu.rs	2026-10-08 18:09:38
+@@ -32,11 +32,11 @@
+ /// `DisplayHandle` from `raw-window-handle` is `!Send`/`!Sync` because the enum
+ /// contains platform variants with raw pointers. On web the handle is always empty,
+ /// so this wrapper is safe.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ #[derive(Clone, Debug)]
+ struct WebDisplay;
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ impl egui_wgpu::wgpu::rwh::HasDisplayHandle for WebDisplay {
+     fn display_handle(
+         &self,

@@ -1,0 +1,10 @@
+{
+	"kind" : "kandelo-experimental-terminal-session",
+	"version" : 1,
+	"initial" : {
+		"path" : "/usr/local/bin/dash",
+		"argv" : [ "dash" ],
+		"uid" : 0,
+		"gid" : 0
+	}
+}

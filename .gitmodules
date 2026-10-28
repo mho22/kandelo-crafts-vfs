@@ -1,0 +1,3 @@
+[submodule "kandelo"]
+	path = kandelo
+	url = https://github.com/Automattic/kandelo.git

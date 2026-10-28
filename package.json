@@ -1,7 +1,11 @@
 {
 	"scripts" : {
 		"build" : "bash scripts/build.sh",
+		"kandelo" : "bash scripts/kandelo.sh",
 		"vfs" : "node scripts/vfs.ts"
 	},
-	"type" : "module"
+	"type" : "module",
+	"devDependencies" : {
+		"spacefast" : "0.8.0"
+	}
 }

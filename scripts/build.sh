@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build binaries/photocraft.wasm, binaries/wlcompositor.wasm and
-# binaries/dash.wasm with the Kandelo SDK, inside the dev shell of a Kandelo
+# Build binaries/photocraft.wasm with the Kandelo SDK, and copy the Kandelo
+# programs the image runs next to it, inside the dev shell of a Kandelo
 # checkout.
 #
 set -euo pipefail
@@ -15,14 +15,14 @@ SHA256="b980627cb085b7759245b869e71984f70f8b4df97a64ccb4f1f871ef22ced9f6"
 
 DEPENDENCIES=( libwayland libxkbcommon libffi )
 
-for candidate in "${KANDELO:-}" "$ROOT/../kandelo" "$ROOT/../../kandelo"; do
+for candidate in "${KANDELO:-}" "$ROOT/kandelo"; do
     [ -f "$candidate/sdk/rust/build-env.sh" ] || continue
     CHECKOUT="$(cd "$candidate" && pwd)"
     break
 done
 
 if [ -z "${CHECKOUT:-}" ]; then
-    echo "kandelo checkout not found. Set KANDELO to its path." >&2
+    echo "kandelo checkout not found. Run git submodule update --init --recursive, or set KANDELO to its path." >&2
     exit 1
 fi
 
@@ -62,13 +62,17 @@ done
 )
 
 cp "$WORK/target/$KANDELO_RUST_TARGET/release/photocraft.wasm" "$ROOT/binaries/photocraft.wasm"
-cp "$(resolve wayland-demo)/wlcompositor.wasm" "$ROOT/binaries/wlcompositor.wasm"
-cp "$(resolve dash)/dash.wasm" "$ROOT/binaries/dash.wasm"
+PROGRAMS=( wayland-demo/wlcompositor wayland-demo/zenity dash/dash
+           kandelo-exchange/kxchgd kandelo-exchange/exchange-save kandelo-exchange/xdg-open )
 
 REPO_ROOT="$CHECKOUT"
 source "$CHECKOUT/scripts/abi-contract-stamp.sh"
 abi_contract_stamp_prepare
-abi_contract_stamp "$ROOT/binaries/wlcompositor.wasm"
-abi_contract_stamp "$ROOT/binaries/dash.wasm"
+for program in "${PROGRAMS[@]}"; do
+    package="${program%/*}"
+    name="${program#*/}"
+    cp "$(resolve "$package")/$name.wasm" "$ROOT/binaries/$name.wasm"
+    abi_contract_stamp "$ROOT/binaries/$name.wasm"
+done
 
 ls -lh "$ROOT/binaries"

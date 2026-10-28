@@ -1,3 +1,8 @@
 .DS_Store
+.spacefast
 binaries/
 work/
+node_modules/
+package-lock.json
+public/photocraft.vfs
+public/kandelo/

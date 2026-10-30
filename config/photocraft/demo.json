@@ -26,7 +26,9 @@
 				"runningPrimary" : [ "kms", "terminal", "syslog" ],
 				"terminalAccess" : "drawer",
 				"internalsAccess" : "drawer",
-				"hostPointer" : true
+				"hostPointer" : true,
+				"dock" : "minimal",
+				"theme" : { "family" : "wordpress", "mode" : "dark" }
 			}
 		}
 	}

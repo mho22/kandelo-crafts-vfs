@@ -1,10 +1,10 @@
-# egui-wgpu 0.36.2: target_arch = "wasm32" means the browser here; Kandelo takes
+# egui-wgpu 0.37.0: target_arch = "wasm32" means the browser here; Kandelo takes
 # the native path. Every such cfg reads
 # all(target_arch = "wasm32", not(target_os = "kandelo")).
 diff -ruN a/src/lib.rs b/src/lib.rs
---- a/src/lib.rs	2026-10-08 18:09:38
-+++ b/src/lib.rs	2026-10-08 18:09:38
-@@ -112,7 +112,7 @@
+--- a/src/lib.rs	2026-10-29 17:52:05
++++ b/src/lib.rs	2026-10-29 17:52:34
+@@ -121,7 +121,7 @@
      ///
      /// This is not available on web.
      /// On web, we always select WebGPU is available, then fall back to WebGL if not.
@@ -13,7 +13,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
      pub available_adapters: Vec<wgpu::Adapter>,
  
      /// Wgpu instance used for creating surfaces and adapters.
-@@ -157,7 +157,7 @@
+@@ -161,7 +161,7 @@
          })
          .await
          .inspect_err(|_err| {
@@ -22,7 +22,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
                  // Nothing to add here
              } else if available_adapters.is_empty() {
                  if std::env::var("DYLD_LIBRARY_PATH").is_ok() {
-@@ -210,7 +210,7 @@
+@@ -214,7 +214,7 @@
          profiling::scope!("RenderState::create"); // async yield give bad names using `profile_function`
  
          // This is always an empty list on web.
@@ -31,7 +31,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
          let available_adapters = {
              let backends = if let WgpuSetup::CreateNew(create_new) = &config.wgpu_setup {
                  create_new.instance_descriptor.backends
-@@ -230,11 +230,11 @@
+@@ -234,11 +234,11 @@
                  device_descriptor,
              }) => {
                  let adapter = {
@@ -45,7 +45,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
                      if let Some(native_adapter_selector) = _native_adapter_selector {
                          native_adapter_selector(&available_adapters, compatible_surface)
                              .map_err(WgpuError::CustomNativeAdapterSelectionError)
-@@ -285,7 +285,7 @@
+@@ -296,7 +296,7 @@
          Ok(Self {
              instance,
              adapter,
@@ -54,7 +54,16 @@ diff -ruN a/src/lib.rs b/src/lib.rs
              available_adapters,
              device,
              queue,
-@@ -500,7 +500,7 @@
+@@ -364,7 +364,7 @@
+ // On wasm this only holds with `fragile-send-sync-non-atomic-wasm` and without threads;
+ // look at the feature flag for an explanation.
+ #[cfg(any(
+-    not(target_arch = "wasm32"),
++    not(all(target_arch = "wasm32", not(target_os = "kandelo"))),
+     all(
+         feature = "fragile-send-sync-non-atomic-wasm",
+         not(target_feature = "atomics")
+@@ -517,7 +517,7 @@
          write!(summary, ", driver_info: {driver_info:?}").ok();
      }
      if *vendor != 0 {
@@ -63,7 +72,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
          {
              write!(
                  summary,
-@@ -509,7 +509,7 @@
+@@ -526,7 +526,7 @@
              )
              .ok();
          }
@@ -72,7 +81,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
          {
              write!(summary, ", vendor: 0x{vendor:04X}").ok();
          }
-@@ -538,7 +538,7 @@
+@@ -555,7 +555,7 @@
  }
  
  /// Tries to parse the adapter's vendor ID to a human-readable string.
@@ -82,8 +91,8 @@ diff -ruN a/src/lib.rs b/src/lib.rs
      match vendor_id {
          wgpu::hal::auxil::db::amd::VENDOR => "AMD",
 diff -ruN a/src/renderer.rs b/src/renderer.rs
---- a/src/renderer.rs	2026-10-08 18:09:38
-+++ b/src/renderer.rs	2026-10-08 18:09:38
+--- a/src/renderer.rs	2026-10-29 17:52:05
++++ b/src/renderer.rs	2026-10-29 17:52:34
 @@ -9,13 +9,13 @@
  
  // Only implements Send + Sync on wasm32 in order to allow storing wgpu resources on the type map.
@@ -100,18 +109,18 @@ diff -ruN a/src/renderer.rs b/src/renderer.rs
      not(feature = "fragile-send-sync-non-atomic-wasm"),
  ))]
  /// You can use this for storage when implementing [`CallbackTrait`].
-@@ -1168,7 +1168,7 @@
- 
- // Look at the feature flag for an explanation.
- #[cfg(not(all(
--    target_arch = "wasm32",
-+    all(target_arch = "wasm32", not(target_os = "kandelo")),
-     not(feature = "fragile-send-sync-non-atomic-wasm"),
- )))]
- #[test]
+@@ -1263,7 +1263,7 @@
+ // On wasm this only holds with `fragile-send-sync-non-atomic-wasm` and without threads;
+ // look at the feature flag for an explanation.
+ #[cfg(any(
+-    not(target_arch = "wasm32"),
++    not(all(target_arch = "wasm32", not(target_os = "kandelo"))),
+     all(
+         feature = "fragile-send-sync-non-atomic-wasm",
+         not(target_feature = "atomics")
 diff -ruN a/src/setup.rs b/src/setup.rs
---- a/src/setup.rs	2026-10-08 18:09:38
-+++ b/src/setup.rs	2026-10-08 18:09:38
+--- a/src/setup.rs	2026-10-29 17:52:05
++++ b/src/setup.rs	2026-10-29 17:52:34
 @@ -104,7 +104,7 @@
                  // Emscripten is excluded: wgpu gates both its `webgpu` backend and
                  // its `web_sys` re-export on `not(Emscripten)` (see the cfg aliases

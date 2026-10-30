@@ -1,0 +1,45 @@
+# egui_extras 0.37.0: target_arch = "wasm32" means the browser here; Kandelo takes
+# the native path. Every such cfg reads
+# all(target_arch = "wasm32", not(target_os = "kandelo")).
+diff -ruN a/src/loaders/background_decode.rs b/src/loaders/background_decode.rs
+--- a/src/loaders/background_decode.rs	2026-10-29 17:52:05
++++ b/src/loaders/background_decode.rs	2026-10-29 17:52:34
+@@ -44,7 +44,7 @@
+         let loader_name = self.loader_name;
+ 
+         cfg_select! {
+-            target_arch = "wasm32" => {
++            all(target_arch = "wasm32", not(target_os = "kandelo")) => {
+                 let _ = ctx;
+                 log::trace!("{loader_name} - started loading {uri:?}");
+                 let result = decode(bytes);
+diff -ruN a/src/loaders.rs b/src/loaders.rs
+--- a/src/loaders.rs	2026-10-29 17:52:05
++++ b/src/loaders.rs	2026-10-29 17:52:34
+@@ -65,7 +65,7 @@
+ ///
+ /// See [`egui::load`] for more information about how loaders work.
+ pub fn install_image_loaders(ctx: &egui::Context) {
+-    #[cfg(all(not(target_arch = "wasm32"), feature = "file"))]
++    #[cfg(all(not(all(target_arch = "wasm32", not(target_os = "kandelo"))), feature = "file"))]
+     if !ctx.is_loader_installed(self::file_loader::FileLoader::ID) {
+         ctx.add_bytes_loader(alloc::sync::Arc::new(
+             self::file_loader::FileLoader::default(),
+@@ -110,7 +110,7 @@
+     }
+ 
+     #[cfg(all(
+-        any(target_arch = "wasm32", not(feature = "file")),
++        any(all(target_arch = "wasm32", not(target_os = "kandelo")), not(feature = "file")),
+         not(feature = "http"),
+         not(feature = "image"),
+         not(feature = "svg")
+@@ -120,7 +120,7 @@
+     let _ = ctx;
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub mod file_loader;
+ 
+ #[cfg(feature = "http")]

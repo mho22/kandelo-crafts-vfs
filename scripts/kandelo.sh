@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Build the Kandelo browser app into public/kandelo with the Kandelo checkout
-# that builds the binaries, so the app's kernel matches the image's ABI.
+# Build the Kandelo browser app with the Kandelo checkout that builds the
+# binaries, and copy it into public/<app>/kandelo for every app with an image,
+# so the app's kernel matches the image's ABI.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -9,7 +10,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
 BASE="/kandelo/"
-OUT="$ROOT/public/kandelo"
+OUT="$ROOT/work/kandelo"
 
 KEEP=( shell rootfs )
 
@@ -25,12 +26,14 @@ if [ -z "${CHECKOUT:-}" ]; then
 fi
 
 ABI="$(grep -o 'ABI_VERSION = [0-9]*' "$CHECKOUT/host/src/generated/abi.ts" | grep -o '[0-9]*$')"
-IMAGE="$(LC_ALL=C grep -a -o -m1 '"kernelAbi":[0-9]*' "$ROOT/public/photocraft.vfs" | grep -o '[0-9]*$')"
+IMAGES=( "$ROOT"/public/*/*.vfs )
 
-if [ "$ABI" != "$IMAGE" ]; then
-    echo "the checkout's kernel has ABI $ABI and public/photocraft.vfs has ABI $IMAGE. Build both with the same checkout." >&2
+for image in "${IMAGES[@]}"; do
+    IMAGE_ABI="$(LC_ALL=C grep -a -o -m1 '"kernelAbi":[0-9]*' "$image" | grep -o '[0-9]*$')"
+    [ "$ABI" = "$IMAGE_ABI" ] && continue
+    echo "the checkout's kernel has ABI $ABI and ${image#$ROOT/} has ABI $IMAGE_ABI. Build both with the same checkout." >&2
     exit 1
-fi
+done
 
 cd "$CHECKOUT"
 
@@ -55,5 +58,11 @@ for image in "$OUT"/assets/*.vfs-*.zst; do
 done
 
 git -C "$CHECKOUT" rev-parse HEAD > "$OUT/COMMIT"
+
+for image in "${IMAGES[@]}"; do
+    site="$(dirname "$image")"
+    rm -rf "$site/kandelo"
+    cp -R "$OUT" "$site/kandelo"
+done
 
 du -sh "$OUT"

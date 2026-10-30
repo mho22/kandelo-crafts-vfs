@@ -4,5 +4,5 @@ binaries/
 work/
 node_modules/
 package-lock.json
-public/photocraft.vfs
-public/kandelo/
+public/*/*.vfs
+public/*/kandelo/

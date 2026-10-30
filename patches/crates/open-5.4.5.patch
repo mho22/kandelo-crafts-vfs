@@ -1,8 +1,8 @@
-# open 5.4.4: Kandelo is a Unix with xdg-open semantics; without it in the
+# open 5.4.5: Kandelo is a Unix with xdg-open semantics; without it in the
 # platform list the crate stops with compile_error!.
 diff -ruN a/Cargo.toml b/Cargo.toml
---- a/Cargo.toml	2026-10-08 18:09:38
-+++ b/Cargo.toml	2026-10-08 18:09:38
+--- a/Cargo.toml
++++ b/Cargo.toml
 @@ -52,7 +52,7 @@
  test = false
  doc = false
@@ -13,8 +13,8 @@ diff -ruN a/Cargo.toml b/Cargo.toml
  
  [target."cfg(unix)".dependencies.libc]
 diff -ruN a/src/lib.rs b/src/lib.rs
---- a/src/lib.rs	2026-10-08 18:09:38
-+++ b/src/lib.rs	2026-10-08 18:09:38
+--- a/src/lib.rs
++++ b/src/lib.rs
 @@ -125,7 +125,8 @@
      target_os = "illumos",
      target_os = "solaris",
@@ -35,7 +35,17 @@ diff -ruN a/src/lib.rs b/src/lib.rs
  )))]
  compile_error!("open is not supported on this platform");
  
-@@ -451,7 +453,8 @@
+@@ -274,7 +276,8 @@
+         target_os = "illumos",
+         target_os = "solaris",
+         target_os = "aix",
+-        target_os = "hurd"
++        target_os = "hurd",
++        target_os = "kandelo"
+     ))]
+     return unix::launchers(path);
+ 
+@@ -647,7 +650,8 @@
      target_os = "illumos",
      target_os = "solaris",
      target_os = "aix",
@@ -45,7 +55,7 @@ diff -ruN a/src/lib.rs b/src/lib.rs
  ))]
  mod wsl;
  
-@@ -465,7 +468,8 @@
+@@ -661,7 +665,8 @@
      target_os = "illumos",
      target_os = "solaris",
      target_os = "aix",

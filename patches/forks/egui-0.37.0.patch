@@ -1,30 +1,31 @@
-# egui 0.36.2: target_arch = "wasm32" means the browser here; Kandelo takes
+# egui 0.37.0: target_arch = "wasm32" means the browser here; Kandelo takes
 # the native path. Every such cfg reads
 # all(target_arch = "wasm32", not(target_os = "kandelo")).
 diff -ruN a/Cargo.toml b/Cargo.toml
---- a/Cargo.toml	2026-10-08 18:09:38
-+++ b/Cargo.toml	2026-10-08 18:09:38
-@@ -142,7 +142,7 @@
- [dependencies.unicode-segmentation]
- version = "1.13"
+--- a/Cargo.toml	2026-10-29 17:52:05
++++ b/Cargo.toml	2026-10-29 17:52:33
+@@ -205,7 +205,7 @@
+ ]
+ default-features = false
  
 -[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 +[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies.web-sys]
  version = "0.3.103"
  features = ["File"]
- 
+ optional = true
 diff -ruN a/src/data/input/dropped_file.rs b/src/data/input/dropped_file.rs
---- a/src/data/input/dropped_file.rs	2026-10-08 18:09:38
-+++ b/src/data/input/dropped_file.rs	2026-10-08 18:09:38
-@@ -1,6 +1,6 @@
- use std::{path::Path, sync::Arc};
+--- a/src/data/input/dropped_file.rs	2026-10-29 17:52:05
++++ b/src/data/input/dropped_file.rs	2026-10-29 17:52:33
+@@ -1,7 +1,7 @@
+ use alloc::sync::Arc;
+ use std::path::Path;
  
 -#[cfg(target_arch = "wasm32")]
 +#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
  use core::{future::Future, pin::Pin};
  
  /// A file dropped into egui.
-@@ -21,7 +21,7 @@
+@@ -22,7 +22,7 @@
      /// # Errors
      ///
      /// Returns an error if the browser cannot read the file.
@@ -33,7 +34,7 @@ diff -ruN a/src/data/input/dropped_file.rs b/src/data/input/dropped_file.rs
      fn bytes_async(&self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, String>> + '_>>;
  
      /// Read the file contents.
-@@ -29,23 +29,23 @@
+@@ -30,13 +30,13 @@
      /// # Errors
      ///
      /// Returns an error if the file cannot be read.
@@ -42,28 +43,16 @@ diff -ruN a/src/data/input/dropped_file.rs b/src/data/input/dropped_file.rs
      fn bytes(&self) -> Result<Vec<u8>, String>;
  
      /// The browser file handle, if this file was dropped on the web.
--    #[cfg(target_arch = "wasm32")]
-+    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     ///
+     /// Requires the `web_file` feature.
+-    #[cfg(all(target_arch = "wasm32", feature = "web_file"))]
++    #[cfg(all(all(target_arch = "wasm32", not(target_os = "kandelo")), feature = "web_file"))]
      fn web_file(&self) -> Option<&web_sys::File> {
          None
      }
- }
- 
- /// A shared reference to a dropped file.
--#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
-+#[cfg(not(all(all(target_arch = "wasm32", not(target_os = "kandelo")), target_feature = "atomics")))]
- pub type DroppedFileHandle = Arc<dyn DroppedFile + Send + Sync>;
- 
- /// A shared reference to a dropped file.
- ///
- /// This is not necessarily `Send + Sync` when wasm threads are enabled, because
- /// [`web_sys::File`] is not thread-safe in that configuration.
--#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
-+#[cfg(all(all(target_arch = "wasm32", not(target_os = "kandelo")), target_feature = "atomics"))]
- pub type DroppedFileHandle = Arc<dyn DroppedFile>;
 diff -ruN a/src/data/input/raw_input.rs b/src/data/input/raw_input.rs
---- a/src/data/input/raw_input.rs	2026-10-08 18:09:38
-+++ b/src/data/input/raw_input.rs	2026-10-08 18:09:38
+--- a/src/data/input/raw_input.rs	2026-10-29 17:52:05
++++ b/src/data/input/raw_input.rs	2026-10-29 17:52:33
 @@ -67,11 +67,11 @@
      ///
      /// egui never reads the file contents.
@@ -79,9 +68,9 @@ diff -ruN a/src/data/input/raw_input.rs b/src/data/input/raw_input.rs
      )]
      ///
 diff -ruN a/src/input_state/mod.rs b/src/input_state/mod.rs
---- a/src/input_state/mod.rs	2026-10-08 18:09:38
-+++ b/src/input_state/mod.rs	2026-10-08 18:09:38
-@@ -100,7 +100,7 @@
+--- a/src/input_state/mod.rs	2026-10-29 17:52:05
++++ b/src/input_state/mod.rs	2026-10-29 17:52:33
+@@ -101,7 +101,7 @@
  impl Default for InputOptions {
      fn default() -> Self {
          // TODO(emilk): figure out why these constants need to be different on web and on native (winit).
@@ -91,8 +80,8 @@ diff -ruN a/src/input_state/mod.rs b/src/input_state/mod.rs
              8.0
          } else {
 diff -ruN a/src/os.rs b/src/os.rs
---- a/src/os.rs	2026-10-08 18:09:38
-+++ b/src/os.rs	2026-10-08 18:09:38
+--- a/src/os.rs	2026-10-29 17:52:05
++++ b/src/os.rs	2026-10-29 17:52:33
 @@ -30,7 +30,7 @@
  impl OperatingSystem {
      /// Uses the compile-time `target_arch` to identify the OS.
@@ -103,9 +92,9 @@ diff -ruN a/src/os.rs b/src/os.rs
          } else if cfg!(target_os = "android") {
              Self::Android
 diff -ruN a/src/style.rs b/src/style.rs
---- a/src/style.rs	2026-10-08 18:09:38
-+++ b/src/style.rs	2026-10-08 18:09:38
-@@ -1394,7 +1394,7 @@
+--- a/src/style.rs	2026-10-29 17:52:05
++++ b/src/style.rs	2026-10-29 17:52:33
+@@ -1531,7 +1531,7 @@
          Self {
              debug_on_hover: false,
              debug_on_hover_with_all_modifiers: cfg!(feature = "callstack")

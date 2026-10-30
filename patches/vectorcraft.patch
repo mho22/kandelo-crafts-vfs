@@ -1,0 +1,2805 @@
+# vectorcraft 0.18.0: target_arch = "wasm32" means the browser build
+# (apps/vectorcraft-web) here; Kandelo takes the native paths (files
+# opened by path, rayon threads, rfd, arboard, webbrowser). Every such cfg
+# reads all(target_arch = "wasm32", not(target_os = "kandelo")). Kandelo
+# has no X server, so the app asks eframe for Wayland only there.
+# The workspace [patch] also names three egui crates Cargo.lock does not
+# use; vendoring skips them and an offline build stops on them.
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2026-10-29 21:03:56
++++ b/Cargo.toml	2026-10-30 13:25:18
+@@ -160,8 +160,5 @@
+ egui_glow = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ egui_extras = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ eframe = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
+diff -ruN a/apps/vectorcraft/Cargo.toml b/apps/vectorcraft/Cargo.toml
+--- a/apps/vectorcraft/Cargo.toml	2026-10-29 21:03:56
++++ b/apps/vectorcraft/Cargo.toml	2026-10-30 13:25:18
+@@ -21,13 +21,17 @@
+ # Shared across the Craft suite: decides who draws the window frame per desktop (compositor vs app)
+ # so VectorCraft matches the rest on Linux. `egui` adds `craft_window::decorate`. See #217.
+ craft-window = { workspace = true }
+-eframe = { workspace = true, features = ["clipboard", "default_fonts", "wayland", "x11"] }
++eframe = { workspace = true, features = ["clipboard", "default_fonts", "wayland"] }
+ egui = { workspace = true }
+ serde_json = { workspace = true }
+ log = { workspace = true }
+ chrono = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++# Kandelo has no X server: Wayland only.
++[target.'cfg(not(target_os = "kandelo"))'.dependencies]
++eframe = { workspace = true, features = ["x11"] }
++
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ rfd = { workspace = true }
+ # wayland-data-control: native Wayland clipboard (Linux; X11 through XWayland only sees what X11 apps copied).
+ arboard = { workspace = true, features = ["image-data", "wayland-data-control"] }
+diff -ruN a/crates/color/src/cms.rs b/crates/color/src/cms.rs
+--- a/crates/color/src/cms.rs	2026-10-29 21:03:56
++++ b/crates/color/src/cms.rs	2026-10-30 13:25:18
+@@ -308,7 +308,7 @@
+ }
+ 
+ /// Load a `.icc`/`.icm` file from disk (native only).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn load_icc_file(path: &std::path::Path) -> Result<ProfileInfo, CmsError> {
+     let bytes = std::fs::read(path).map_err(|e| CmsError::Io(format!("{}: {e}", path.display())))?;
+     register_icc(&bytes, None)
+diff -ruN a/crates/doc/src/depth.rs b/crates/doc/src/depth.rs
+--- a/crates/doc/src/depth.rs	2026-10-29 21:03:56
++++ b/crates/doc/src/depth.rs	2026-10-30 13:25:18
+@@ -53,7 +53,7 @@
+ /// has 1 MB on Windows), or here where there are no threads (the web) or none can be started. For
+ /// readers whose recursion is capped but heavy; a panic in `f` goes on to the caller.
+ pub fn with_deep_stack<T: Send>(f: impl Fn() -> T + Sync) -> T {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let threaded = std::thread::scope(|s| {
+             let thread = std::thread::Builder::new().stack_size(16 << 20).spawn_scoped(s, &f).ok()?;
+diff -ruN a/crates/doc/src/metadata.rs b/crates/doc/src/metadata.rs
+--- a/crates/doc/src/metadata.rs	2026-10-29 21:03:56
++++ b/crates/doc/src/metadata.rs	2026-10-30 13:25:18
+@@ -115,12 +115,12 @@
+ }
+ 
+ /// The current time as Unix seconds (UTC); `None` where the platform has no clock (the web build).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn now_unix() -> Option<i64> {
+     use std::time::{SystemTime, UNIX_EPOCH};
+     SystemTime::now().duration_since(UNIX_EPOCH).ok().and_then(|d| i64::try_from(d.as_secs()).ok())
+ }
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub fn now_unix() -> Option<i64> {
+     None
+ }
+diff -ruN a/crates/doc/src/node/kind.rs b/crates/doc/src/node/kind.rs
+--- a/crates/doc/src/node/kind.rs	2026-10-29 21:03:56
++++ b/crates/doc/src/node/kind.rs	2026-10-30 13:25:18
+@@ -251,7 +251,7 @@
+     /// first, so its files buffer nothing; a reordered file buffers what comes before it, and
+     /// a crafted one could fill memory with values two bytes each in the file before any object in
+     /// them is counted (#3587).
+-    pub const MAX_BUFFERED_VALUES: usize = if cfg!(target_arch = "wasm32") { 4 << 20 } else { 32 << 20 };
++    pub const MAX_BUFFERED_VALUES: usize = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 4 << 20 } else { 32 << 20 };
+ 
+     std::thread_local! {
+         /// Values the fields buffered on this thread may still hold, and the budget they come from.
+diff -ruN a/crates/doc/src/node/wire.rs b/crates/doc/src/node/wire.rs
+--- a/crates/doc/src/node/wire.rs	2026-10-29 21:03:56
++++ b/crates/doc/src/node/wire.rs	2026-10-30 13:25:18
+@@ -97,7 +97,7 @@
+ /// Most objects [`with_node_budget`] lets a document read: 4M (about 1 GB of the smallest
+ /// objects), 512K in the web build. Paths have their own anchor budget
+ /// ([`vectorcraft_geom::path::MAX_READ_ANCHORS`]); this one bounds the objects themselves.
+-pub const MAX_READ_NODES: usize = if cfg!(target_arch = "wasm32") { 512 << 10 } else { 4 << 20 };
++pub const MAX_READ_NODES: usize = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 512 << 10 } else { 4 << 20 };
+ 
+ std::thread_local! {
+     /// Objects the document being read on this thread may still have, and the budget they come
+diff -ruN a/crates/doc/src/pixels.rs b/crates/doc/src/pixels.rs
+--- a/crates/doc/src/pixels.rs	2026-10-29 21:03:56
++++ b/crates/doc/src/pixels.rs	2026-10-30 13:25:18
+@@ -9,7 +9,7 @@
+ /// The most memory the decoded RGBA pixels of one image may take: the allowance the importers
+ /// and the renderer decode within (a 60 in sheet at 300 ppi is ~475 MB). The web app has 4 GB to
+ /// address and aborts when an allocation fails, so it keeps the decoder's own 512 MB.
+-pub const MAX_RASTER_ALLOC: u64 = if cfg!(target_arch = "wasm32") { 512 << 20 } else { 2 << 30 };
++pub const MAX_RASTER_ALLOC: u64 = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 512 << 20 } else { 2 << 30 };
+ 
+ /// The pixels of encoded image `bytes` as RGBA; `None` when they can't be decoded, would take
+ /// more than `max` bytes as RGBA, or need more than `max` bytes to decode. The size is read from
+diff -ruN a/crates/engine/src/cmd/buildcmds/trace.rs b/crates/engine/src/cmd/buildcmds/trace.rs
+--- a/crates/engine/src/cmd/buildcmds/trace.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/buildcmds/trace.rs	2026-10-30 13:25:18
+@@ -285,11 +285,11 @@
+ /// 0.7 GB, with a peak of about 1 GB while tracing: a 4000 × 3000 photo at High Fidelity Photo
+ /// makes about 1.9 million, and even at Paths 100, Noise 1 and every tone about 7.9 million. On the
+ /// web, where a page has at most 4 GB of memory, the limit stays at 2,000,000.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub const MAX_TRACE_ANCHORS: usize = 8_000_000;
+ 
+ /// The most anchor points an Image Trace may make on the web (see the native limit).
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub const MAX_TRACE_ANCHORS: usize = 2_000_000;
+ 
+ /// The live shape for a shape the tracer found (in the image's pixels), placed in the document by `xf`.
+diff -ruN a/crates/engine/src/cmd/colormgmt.rs b/crates/engine/src/cmd/colormgmt.rs
+--- a/crates/engine/src/cmd/colormgmt.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/colormgmt.rs	2026-10-30 13:25:18
+@@ -17,7 +17,7 @@
+ use vectorcraft_doc::ColorMode;
+ use vectorcraft_render::proof;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::EngineError;
+ use super::{CommandSpec, Result, Session, always, bad, bool_or, cmd, color_value, has_doc, str_param, targets};
+ 
+@@ -188,7 +188,7 @@
+     Ok(settings_json(&st))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn load_profile(s: &mut Session, p: &Value) -> Result<Value> {
+     const C: &str = "color.loadProfile";
+     let path = str_param(p, "path").ok_or_else(|| bad(C, "missing `path`"))?;
+@@ -226,7 +226,7 @@
+     Ok(json!({"removed": info.name}))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn load_profile(_: &mut Session, _: &Value) -> Result<Value> {
+     Err(bad("color.loadProfile", "loading profiles from disk isn't available in the browser"))
+ }
+diff -ruN a/crates/engine/src/cmd/fileio/access.rs b/crates/engine/src/cmd/fileio/access.rs
+--- a/crates/engine/src/cmd/fileio/access.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/fileio/access.rs	2026-10-30 13:25:18
+@@ -1,4 +1,4 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::write_atomic;
+ use super::{EngineError, Result, Session, Value, bad, json};
+ 
+@@ -9,7 +9,7 @@
+ // `file_created`: no file), as is any path once roots are in force without its kind of access.
+ 
+ /// `path` checked for reading against the automation roots in force.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn may_read(path: &str) -> Result<()> {
+     #[cfg(test)]
+     touch(path);
+@@ -43,12 +43,12 @@
+ }
+ 
+ /// `path` checked for writing against the automation roots in force.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn may_write(path: &str) -> Result<()> {
+     crate::file_access::check_write(path).map_err(EngineError::Other)
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
+     may_read(path)?;
+     // A device or pipe may never end: only a regular file is read to its end.
+@@ -60,7 +60,7 @@
+ 
+ /// The first `max` bytes of the file at `path` (all of it when it is shorter). Anything but a
+ /// regular file (a folder, a pipe, a device) is refused, also through a link.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn read_file_head(path: &str, max: usize) -> Result<Vec<u8>> {
+     use std::io::Read;
+     may_read(path)?;
+@@ -72,7 +72,7 @@
+     Ok(out)
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
+     // Work that stops early for a cancel can leave a truncated result: none of it is written.
+     vectorcraft_doc::cancel::check()?;
+@@ -82,14 +82,14 @@
+ }
+ 
+ /// [`write_file`] with what `fill` writes into the file (a save streamed into it).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn write_file_with(path: &str, fill: &mut dyn FnMut(&mut dyn std::io::Write) -> std::io::Result<()>) -> Result<()> {
+     vectorcraft_doc::cancel::check()?;
+     may_write(path)?;
+     vectorcraft_format::write_atomic_with(std::path::Path::new(path), |f| fill(f)).map_err(|e| EngineError::Other(format!("{path}: {e}")))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn create_dir(path: &str) -> Result<()> {
+     may_write(path)?;
+     std::fs::create_dir_all(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))
+@@ -97,7 +97,7 @@
+ 
+ /// Write `bytes` to a new file at `path`. A file already at `path` is an error and is never
+ /// replaced. When the write fails part way, the file it started is removed.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn write_new_file(path: &str, bytes: &[u8]) -> Result<()> {
+     use std::io::Write as _;
+     may_write(path)?;
+@@ -113,11 +113,11 @@
+ }
+ 
+ /// The highest number [`copy_new`] gives a copy's name (`Name 99.png`).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_COPY_NUMBER: u32 = 99;
+ 
+ /// Where [`copy_new`] put a file.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) enum Placed {
+     /// Copied to this new file.
+     Copied(std::path::PathBuf),
+@@ -131,7 +131,7 @@
+ /// file and its metadata), which is kept. When `create` fails with `AlreadyExists` (the name was
+ /// taken meanwhile), it tries the next name. `None` when no name is free or holds the same
+ /// contents; a name whose metadata can't be read counts as taken.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn copy_new(
+     from: &std::path::Path,
+     dir: &std::path::Path,
+@@ -168,7 +168,7 @@
+ 
+ /// The entries of folder `path`, sorted by name: at most `max`, and whether there were more. A
+ /// link isn't followed: its target may lie outside the automation roots.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn list_dir(path: &str, max: usize) -> Result<(Vec<Value>, bool)> {
+     may_read(path)?;
+     let dir = std::fs::read_dir(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
+@@ -194,14 +194,14 @@
+     Ok((entries.into_iter().map(|(_, v)| v).collect(), truncated))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(super) fn list_dir(_: &str, _: usize) -> Result<(Vec<Value>, bool)> {
+     Err(EngineError::Other("no file system here".into()))
+ }
+ 
+ /// A file's size (bytes) and modification time (ms since the Unix epoch, when the file system
+ /// keeps one); `None` when there is no file at `path` (or automation may not read it).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn file_stamp(path: &str) -> Option<(u64, Option<u64>)> {
+     let m = file_metadata(path).filter(std::fs::Metadata::is_file)?;
+     let modified = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64);
+@@ -210,27 +210,27 @@
+ 
+ /// When the file at `path` was created (ms since the Unix epoch), when the file system keeps it
+ /// (and automation may read it).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn file_created(path: &str) -> Option<u64> {
+     let t = file_metadata(path)?.created().ok()?;
+     t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_millis() as u64)
+ }
+ 
+ /// The file system's metadata of `path`, following links (when automation may read it).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn file_metadata(path: &str) -> Option<std::fs::Metadata> {
+     may_read(path).ok()?;
+     std::fs::metadata(path).ok()
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn file_created(_: &str) -> Option<u64> {
+     None
+ }
+ 
+ /// `path` made absolute against the working directory (as given when absolute already, or when
+ /// that fails).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn absolute_path(path: &str) -> String {
+     if std::path::Path::new(path).is_absolute() {
+         return path.to_string();
+@@ -374,47 +374,47 @@
+     Some(format!(r"\\{unc}\{name}"))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn file_stamp(_: &str) -> Option<(u64, Option<u64>)> {
+     None
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn absolute_path(path: &str) -> String {
+     path.to_string()
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn no_fs(path: &str) -> EngineError {
+     EngineError::Other(format!("{path}: no file system here (pass dataBase64 to open; omit the path to get dataBase64)"))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn read_file(path: &str) -> Result<Vec<u8>> {
+     Err(no_fs(path))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn read_file_head(path: &str, _: usize) -> Result<Vec<u8>> {
+     Err(no_fs(path))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn write_file(path: &str, _: &[u8]) -> Result<()> {
+     Err(no_fs(path))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub fn write_file_with(path: &str, _: &mut dyn FnMut(&mut dyn std::io::Write) -> std::io::Result<()>) -> Result<()> {
+     Err(no_fs(path))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn create_dir(path: &str) -> Result<()> {
+     Err(no_fs(path))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn write_new_file(path: &str, _: &[u8]) -> Result<()> {
+     Err(no_fs(path))
+ }
+diff -ruN a/crates/engine/src/cmd/fileio/action_batch.rs b/crates/engine/src/cmd/fileio/action_batch.rs
+--- a/crates/engine/src/cmd/fileio/action_batch.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/fileio/action_batch.rs	2026-10-30 13:25:18
+@@ -6,26 +6,26 @@
+ //! <https://helpx.adobe.com/illustrator/desktop/automate-visualize-data/automate-actions/batch-options.html>
+ 
+ use serde_json::Value;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use serde_json::json;
+ 
+ use super::super::{Result, Session, bad};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::super::{bool_or, find_command, str_param};
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(super) fn action_batch(_: &mut Session, _: &Value) -> Result<Value> {
+     Err(bad("action.batch", "no file system here"))
+ }
+ 
+ /// Caps on a batch (folders and MCP payloads are untrusted).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_BATCH_FILES: usize = 500;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_BATCH_DEPTH: usize = 8;
+ 
+ /// Shared Batch options for one run.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ struct Run<'a> {
+     label: &'a str,
+     steps: &'a [Value],
+@@ -37,7 +37,7 @@
+ }
+ 
+ /// Play `commands` on each source file or data set.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn action_batch(s: &mut Session, p: &Value) -> Result<Value> {
+     use super::{absolute_path, may_write};
+ 
+@@ -98,7 +98,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn batch_folder(s: &mut Session, cmd: &str, p: &Value, override_open: bool, run: &Run<'_>) -> Result<Value> {
+     use super::{absolute_path, may_read};
+ 
+@@ -133,7 +133,7 @@
+     Ok(json!({"processed": processed, "count": processed.len(), "failed": failed, "stopped": false}))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn batch_datasets(s: &mut Session, cmd: &str, run: &Run<'_>) -> Result<Value> {
+     use super::distinct_names;
+     use super::screens::file_part;
+@@ -172,7 +172,7 @@
+ }
+ 
+ /// Drop Open (and optionally Close) steps when the batch supplies the file itself.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn filter_steps(cmds: &[Value], drop_open: bool, drop_close: bool) -> Vec<Value> {
+     cmds.iter()
+         .filter(|c| {
+@@ -189,7 +189,7 @@
+         .collect()
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn process_one_file(s: &mut Session, run: &Run<'_>, path: &str, stem: &str, ext: &str) -> Result<Value> {
+     s.execute("document.open", &json!({"path": path}))?;
+     let rewritten = rewrite_paths(run.steps, run.override_save, run.override_export, run.dest_folder, stem, ext);
+@@ -199,7 +199,7 @@
+     Ok(json!({"path": path, "result": batch}))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn process_one_dataset(s: &mut Session, run: &Run<'_>, name: &str, stem: &str) -> Result<Value> {
+     s.execute("dataset.select", &json!({"name": name}))?;
+     let rewritten = rewrite_paths(run.steps, run.override_save, run.override_export, run.dest_folder, stem, "vectorcraft");
+@@ -209,7 +209,7 @@
+     Ok(json!({"dataset": name, "result": batch}))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn finish_destination(s: &mut Session, run: &Run<'_>, stem: &str, ext: &str, source_path: &str, close: bool) -> Result<()> {
+     match run.destination {
+         "none" => Ok(()),
+@@ -242,7 +242,7 @@
+ 
+ /// Save when the extension is a Save format; otherwise export (PNG, JPEG…).
+ /// `as_copy`: `file.saveCopy` so the open document keeps its path (data-set batches).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn write_result(s: &mut Session, path: &str, ext: &str, as_copy: bool) -> Result<()> {
+     use super::SAVE_FORMATS;
+     let id = if ext == "drawcraft" { "vectorcraft" } else { ext };
+@@ -257,7 +257,7 @@
+ 
+ /// Point Save / Export steps at `dest_folder/{stem}.{ext}` when overrides are on: `ext` is the
+ /// extension of the step's `format` ([`format_extension`]), else `default_ext`.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn rewrite_paths(
+     steps: &[Value],
+     override_save: bool,
+@@ -300,7 +300,7 @@
+ /// the dot, when it is one of the format's (`SVG` → `svg`, `.JPEG` → `jpeg`), else the format's
+ /// first (`png8` → `png`, `template` → `vctemplate`). An unknown format (`xyz`) keeps its spelling,
+ /// and the step fails with its command's error.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn format_extension(format: &str) -> String {
+     let written = format.trim_start_matches('.').to_ascii_lowercase();
+     match super::format(format) {
+@@ -311,7 +311,7 @@
+ }
+ 
+ /// Readable files under `folder` (and optionally its subfolders), capped.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn collect_files(folder: &str, include_subdirs: bool, depth: usize) -> Result<Vec<String>> {
+     use std::path::PathBuf;
+ 
+@@ -348,7 +348,7 @@
+     Ok(files)
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn is_openable(path: &str) -> bool {
+     use super::{FORMATS, OPEN_EXTS, extension};
+     let ext = extension(path);
+@@ -359,7 +359,7 @@
+ }
+ 
+ #[cfg(test)]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod tests {
+     use super::*;
+     use serde_json::json;
+diff -ruN a/crates/engine/src/cmd/fileio/tests_screens.rs b/crates/engine/src/cmd/fileio/tests_screens.rs
+--- a/crates/engine/src/cmd/fileio/tests_screens.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/fileio/tests_screens.rs	2026-10-30 13:25:18
+@@ -207,7 +207,7 @@
+ 
+ /// A saved document's `<filename>`, Full Document file and ZIP are named after its file without the
+ /// extension, as Save names it, whatever its File Info title says.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_saved_document_exports_under_its_file_name() {
+     let mut s = session(1);
+@@ -238,7 +238,7 @@
+     assert_eq!(super::screens::first_file(&s, &p).unwrap(), "Spring-poster.png");
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn sub_folders_are_made_in_the_export_folder() {
+     let mut s = session(1);
+@@ -253,7 +253,7 @@
+ 
+ /// #1713: whatever a suffix or prefix says (`..`, an absolute path, a drive, a share), every file
+ /// lands directly in the export folder.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_hostile_suffix_or_prefix_stays_in_the_export_folder() {
+     let mut s = session(1);
+@@ -280,7 +280,7 @@
+     let _ = std::fs::remove_dir_all(top);
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_zip_is_written_into_the_folder() {
+     let mut s = session(1);
+@@ -318,7 +318,7 @@
+ /// writes, with the same names (`-2` included), sub-folders, bytes and reply, into a folder, as a
+ /// zip in it and without a folder, through the writer it is given. Export for Screens remembers
+ /// its settings when it is prepared.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_prepared_export_writes_what_the_command_writes() {
+     let mut s = session(2);
+@@ -410,7 +410,7 @@
+ }
+ 
+ /// A cancel stops a prepared export before its next file; the file written before it stays.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_canceled_export_stops_before_its_next_file() {
+     let mut s = session(3);
+@@ -433,7 +433,7 @@
+ 
+ /// A prepared export reports one progress step per file, and the raster encoders' artboard steps
+ /// are not reported.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_prepared_export_counts_its_files() {
+     let mut s = session(3);
+@@ -460,7 +460,7 @@
+     r["warnings"].as_array().unwrap().iter().filter_map(Value::as_str).filter(|w| w.contains(text)).collect()
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn every_reply_says_once_when_an_image_could_not_be_decoded() {
+     let mut s = session(1);
+@@ -698,7 +698,7 @@
+ /// A cancel that comes after the last file was encoded (here: during the last step, a row that
+ /// repeats the one before it and writes nothing) returns no files and no archive, as it writes no
+ /// archive into a folder.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_cancel_after_the_last_file_returns_nothing() {
+     let mut s = session(1);
+@@ -730,7 +730,7 @@
+ /// A folder export without a ZIP writes each file as it goes: a cancel during the last step, a
+ /// row that repeats the one before it and writes nothing, comes after every file was written, so
+ /// the export returns the written files instead of the cancelled error.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn a_cancel_after_the_last_file_keeps_a_finished_folder_export() {
+     let mut s = session(1);
+diff -ruN a/crates/engine/src/cmd/fileio.rs b/crates/engine/src/cmd/fileio.rs
+--- a/crates/engine/src/cmd/fileio.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/fileio.rs	2026-10-30 13:25:18
+@@ -90,7 +90,7 @@
+ pub use svg::options_map as svg_options;
+ /// Atomic file writes (a temporary file renamed over the target: a failed write never damages the
+ /// file it replaces), for the apps' own writers too.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub use vectorcraft_format::write_atomic;
+ 
+ use super::{CommandSpec, Result, Session, always, bad, cmd, has_doc, has_selection};
+@@ -101,10 +101,10 @@
+ mod export_names;
+ mod formats;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use access::list_dir;
+ pub use access::write_file_with;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) use access::{Placed, copy_new, file_metadata};
+ pub(crate) use access::{absolute_path, create_dir, document_path, file_created, file_stamp, read_file, read_file_head, write_file, write_new_file};
+ #[cfg(all(test, windows))]
+@@ -113,7 +113,7 @@
+ pub(crate) use access::{drive_share_of, share_of};
+ #[cfg(test)]
+ pub(crate) use access::{drive_share_path, share_path, touched};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use access::{may_read, may_write};
+ pub use commands::specs;
+ pub use export_names::artboard_file_names;
+diff -ruN a/crates/engine/src/cmd/findfiles/walk.rs b/crates/engine/src/cmd/findfiles/walk.rs
+--- a/crates/engine/src/cmd/findfiles/walk.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/findfiles/walk.rs	2026-10-30 13:25:18
+@@ -254,7 +254,7 @@
+     items: usize,
+     visitor: Arc<dyn Visitor>,
+ ) -> Result<Search, String> {
+-    if cfg!(target_arch = "wasm32") {
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         return Err("searching a folder isn't available on the web".into());
+     }
+     // The walkers follow no links, so a folder automation may read holds all they read.
+diff -ruN a/crates/engine/src/cmd/fontfiles.rs b/crates/engine/src/cmd/fontfiles.rs
+--- a/crates/engine/src/cmd/fontfiles.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/fontfiles.rs	2026-10-30 13:25:18
+@@ -43,21 +43,21 @@
+ /// The largest font file a search reads and `text.addFontFiles` copies, and the most bytes one
+ /// `text.addFontFiles` copies.
+ pub(crate) const MAX_FONT_FILE: u64 = 256 << 20;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_ADD_BYTES: u64 = 1 << 30;
+ /// The extensions of the font files `text.addFontFiles` copies (in any case), besides suitcase
+ /// fonts.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const FONT_EXTENSIONS: &[&str] = &["ttf", "otf", "ttc", "otc", "woff", "woff2"];
+ /// Why a file wasn't copied.
+ const NOT_A_FILE: &str = "not a file";
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const NOT_A_FONT: &str = "not a font file";
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const TOO_LARGE: &str = "larger than 256 MB";
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const TOO_MUCH: &str = "the files come to more than 1 GB: add fewer at a time";
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const NO_NAME: &str = "every numbered name for it is taken in the Fonts folder";
+ 
+ pub fn specs() -> Vec<CommandSpec> {
+@@ -368,7 +368,7 @@
+ /// `Name.otf`, `Name 2.otf` up to `Name 99.otf` are tried in turn until one is free, which gets
+ /// the copy, or is a file with the same contents, which is kept. At most [`MAX_FONT_FILE`] bytes a
+ /// file and 1 GB in all.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn copy_into(files: &[PathBuf], dir: &Path) -> CopyReport {
+     use super::fileio::Placed;
+     let mut report = CopyReport::default();
+@@ -384,12 +384,12 @@
+ }
+ 
+ /// The web has no file system: nothing is copied.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn copy_into(files: &[PathBuf], _: &Path) -> CopyReport {
+     CopyReport { skipped: files.iter().map(|f| (f.clone(), NOT_A_FILE.to_string())).collect(), ..CopyReport::default() }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn copy_one(from: &Path, dir: &Path, total: &mut u64) -> std::result::Result<super::fileio::Placed, String> {
+     use super::fileio::Placed;
+     let meta = std::fs::symlink_metadata(from).map_err(|e| e.to_string())?;
+@@ -424,7 +424,7 @@
+ 
+ /// Create `to` as a copy of the font file `from`, or for a suitcase font, as an empty file whose
+ /// resource fork is `fork`; never in place of a file.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn create_copy(from: &Path, to: &Path, fork: Option<&[u8]>) -> std::io::Result<()> {
+     let Some(fork) = fork else { return vectorcraft_format::write_new_with(to, |f| copy_capped(from, f)) };
+     vectorcraft_format::write_new_with(to, |_| Ok(()))?;
+@@ -436,7 +436,7 @@
+ 
+ /// Whether the file `to` (`to_len` bytes) holds what the copy of `from` (`len` bytes, or the
+ /// resource fork `fork` of a suitcase font) would.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn same_file(from: &Path, to: &Path, to_len: u64, len: u64, fork: Option<&[u8]>) -> bool {
+     match fork {
+         None => to_len == len && same_contents(from, to),
+@@ -446,7 +446,7 @@
+ 
+ /// The resource fork of the file at `path` (where macOS keeps a suitcase font's fonts), at most
+ /// [`MAX_FONT_FILE`] bytes.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn read_fork(path: &Path) -> std::result::Result<Vec<u8>, String> {
+     use std::io::Read;
+     let mut fork = vec![];
+@@ -458,14 +458,14 @@
+ }
+ 
+ /// Where macOS shows the resource fork of the file at `path`.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn fork_path(path: &Path) -> PathBuf {
+     path.join("..namedfork/rsrc")
+ }
+ 
+ /// Copy the file `from` into `to`, failing past [`MAX_FONT_FILE`] bytes (a file that grew since
+ /// it was measured).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn copy_capped(from: &Path, to: &mut std::fs::File) -> std::io::Result<()> {
+     use std::io::Read;
+     let copied = std::io::copy(&mut std::fs::File::open(from)?.take(MAX_FONT_FILE + 1), to)?;
+@@ -476,7 +476,7 @@
+ }
+ 
+ /// Whether the files `a` and `b` hold the same bytes (read 64 KB at a time).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn same_contents(a: &Path, b: &Path) -> bool {
+     let (Ok(mut a), Ok(mut b)) = (std::fs::File::open(a), std::fs::File::open(b)) else { return false };
+     let (mut x, mut y) = (vec![0; 1 << 16], vec![0; 1 << 16]);
+@@ -490,7 +490,7 @@
+ }
+ 
+ /// Read from `f` until `buf` is full or the file ends: the bytes read.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn fill(f: &mut std::fs::File, buf: &mut [u8]) -> std::io::Result<usize> {
+     use std::io::Read;
+     let mut n = 0;
+diff -ruN a/crates/engine/src/cmd/fonts.rs b/crates/engine/src/cmd/fonts.rs
+--- a/crates/engine/src/cmd/fonts.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/fonts.rs	2026-10-30 13:25:18
+@@ -502,9 +502,9 @@
+ 
+ pub(crate) fn rescan(s: &mut Session, _: &Value) -> Result<Value> {
+     let db = vectorcraft_text::FontDb::global();
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let faces = db.load_system_fonts();
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let faces = 0;
+     // The canvas redraws type in the fonts available now (renderers lay it out again when the
+     // fonts change), and the bounds follow; that isn't an edit to save.
+diff -ruN a/crates/engine/src/cmd/library.rs b/crates/engine/src/cmd/library.rs
+--- a/crates/engine/src/cmd/library.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/library.rs	2026-10-30 13:25:18
+@@ -220,12 +220,12 @@
+         Ok(id)
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn file_exists(&self, id: &str) -> bool {
+         self.path(id).is_some_and(|p| std::path::Path::new(&p).exists())
+     }
+ 
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     fn file_exists(&self, _: &str) -> bool {
+         false
+     }
+@@ -457,7 +457,7 @@
+     head.starts_with(b"\x89PNG\r\n\x1a\n") && head.get(12..16) == Some(b"IHDR".as_slice()) && side(16) && side(20)
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn library_paths(dir: &str) -> Vec<String> {
+     let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
+     let mut v: Vec<String> = rd
+@@ -469,12 +469,12 @@
+     v
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn library_paths(_: &str) -> Vec<String> {
+     vec![]
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn remove_file(path: &str) -> Result<()> {
+     match std::fs::remove_file(path) {
+         Ok(()) => Ok(()),
+@@ -483,7 +483,7 @@
+     }
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn remove_file(_: &str) -> Result<()> {
+     Ok(())
+ }
+diff -ruN a/crates/engine/src/cmd/links.rs b/crates/engine/src/cmd/links.rs
+--- a/crates/engine/src/cmd/links.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/links.rs	2026-10-30 13:25:18
+@@ -1020,7 +1020,7 @@
+ /// `links.relink {copy}`: put the file at `from` (`bytes`, as just read) into the folder `dir`,
+ /// never replacing a file there ([`fileio::copy_new`]) → where it is now, and whether it was
+ /// copied (`false`: a file there with the same contents, of its name or a numbered one, is used).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn copy_into_folder(from: &str, bytes: &[u8], dir: &Path) -> Result<(String, bool)> {
+     use std::io::Write as _;
+     let source = Path::new(from);
+@@ -1043,7 +1043,7 @@
+ }
+ 
+ /// The web has no file system: nothing is copied.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn copy_into_folder(_: &str, _: &[u8], _: &Path) -> Result<(String, bool)> {
+     Err(bad("links.relink", "copying a file isn't available on the web"))
+ }
+diff -ruN a/crates/engine/src/cmd/plugin.rs b/crates/engine/src/cmd/plugin.rs
+--- a/crates/engine/src/cmd/plugin.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/plugin.rs	2026-10-30 13:25:18
+@@ -314,7 +314,7 @@
+ }
+ 
+ /// The plug-in in the `.wasm` file `path`, and its module.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn load_path(path: &str) -> Result<(Plugin, Vec<u8>)> {
+     crate::file_access::check_read(path).map_err(EngineError::Other)?;
+     let limits = vectorcraft_plugins::Limits::default();
+@@ -322,7 +322,7 @@
+     Ok((Plugin::load(&bytes, limits).map_err(err)?.with_source(path), bytes))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn load_path(_: &str) -> Result<(Plugin, Vec<u8>)> {
+     Err(EngineError::Other("installing from a path is not available on the web; pass the module as `dataBase64`".into()))
+ }
+@@ -344,7 +344,7 @@
+     *last = Some((folder.to_string(), load_folder(folder)));
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn load_folder(folder: &str) -> Value {
+     if let Err(e) = crate::file_access::check_read(folder) {
+         return json!({"folder": folder, "error": e});
+@@ -363,7 +363,7 @@
+     }
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn load_folder(folder: &str) -> Value {
+     json!({"folder": folder, "error": "plug-in folders are not available on the web"})
+ }
+diff -ruN a/crates/engine/src/cmd/recovery.rs b/crates/engine/src/cmd/recovery.rs
+--- a/crates/engine/src/cmd/recovery.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/recovery.rs	2026-10-30 13:25:18
+@@ -218,14 +218,14 @@
+ 
+ /// A folder of files (desktop): an area is a sub-folder whose `.lock` file its app keeps locked
+ /// while it runs. Created when the first copy is written.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub struct FolderStore(std::path::PathBuf);
+ 
+ /// The lock file of a [`FolderStore`] area.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const LOCK_FILE: &str = ".lock";
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl FolderStore {
+     pub fn new(folder: impl Into<std::path::PathBuf>) -> Self {
+         Self(folder.into())
+@@ -297,7 +297,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ impl RecoveryStore for FolderStore {
+     fn list(&self) -> std::result::Result<Vec<String>, String> {
+         let mut out = vec![];
+@@ -408,12 +408,12 @@
+     if let Some(st) = &s.recovery.store {
+         return Some(st.clone());
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let folder = Some(s.prefs.recovery_folder.trim()).filter(|f| !f.is_empty()).map(str::to_string).or_else(|| s.recovery.default_folder.clone());
+         folder.map(|f| Arc::new(FolderStore::new(f)) as Arc<dyn RecoveryStore>)
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     None
+ }
+ 
+diff -ruN a/crates/engine/src/cmd/swatchlib.rs b/crates/engine/src/cmd/swatchlib.rs
+--- a/crates/engine/src/cmd/swatchlib.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/cmd/swatchlib.rs	2026-10-30 13:25:18
+@@ -336,7 +336,7 @@
+ }
+ 
+ /// The library files with extensions `exts` in folder `dir`, sorted by name.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn library_files(dir: &str, exts: &[&str]) -> Vec<String> {
+     let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
+     let mut files: Vec<String> = rd
+@@ -348,7 +348,7 @@
+     files
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn library_files(_: &str, _: &[&str]) -> Vec<String> {
+     vec![]
+ }
+diff -ruN a/crates/engine/src/history.rs b/crates/engine/src/history.rs
+--- a/crates/engine/src/history.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/history.rs	2026-10-30 13:25:18
+@@ -150,7 +150,7 @@
+ /// (Linux), at most 1 GiB (the figure elsewhere); 256 MiB on the web, whose memory is small.
+ pub fn default_history_budget() -> usize {
+     const MAX: usize = 1 << 30;
+-    if cfg!(target_arch = "wasm32") {
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         return 256 << 20;
+     }
+     static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+diff -ruN a/crates/engine/src/link_watch.rs b/crates/engine/src/link_watch.rs
+--- a/crates/engine/src/link_watch.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/link_watch.rs	2026-10-30 13:25:18
+@@ -33,7 +33,7 @@
+ /// The stamp of the linked file stored as `path` in the document saved at `doc_path`; `None` when
+ /// there is no file, its path isn't followed ([`crate::cmd::fileio::document_path`]) or
+ /// automation may not read it.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn stamp(path: &str, doc_path: Option<&str>) -> Option<Stamp> {
+     let path = crate::cmd::fileio::document_path(path, doc_path).ok()?;
+     let meta = crate::cmd::fileio::file_metadata(&path)?;
+@@ -41,7 +41,7 @@
+     Some((meta.len(), modified.as_nanos()))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn stamp(_: &str, _: Option<&str>) -> Option<Stamp> {
+     None
+ }
+@@ -64,7 +64,7 @@
+     /// Start stamping the active document's linked files on a worker thread, unless a look is
+     /// still running (or the build has no files to look at: the web app).
+     pub fn start_link_scan(&mut self) {
+-        if self.link_scan.is_some() || cfg!(target_arch = "wasm32") {
++        if self.link_scan.is_some() || cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+             return;
+         }
+         let Some(st) = self.active() else { return };
+diff -ruN a/crates/engine/src/store.rs b/crates/engine/src/store.rs
+--- a/crates/engine/src/store.rs	2026-10-29 21:03:56
++++ b/crates/engine/src/store.rs	2026-10-30 13:25:18
+@@ -96,13 +96,13 @@
+     written.is_ok()
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+     vectorcraft_format::write_atomic(path, bytes)
+ }
+ 
+ /// The browser has no folders to keep anything in (the apps there never attach a store).
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn write_atomic(_: &Path, _: &[u8]) -> std::io::Result<()> {
+     Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "no file system"))
+ }
+@@ -204,7 +204,7 @@
+     }
+ 
+     /// Write the profile `name` (its file's `bytes`) to the store; `false` when it didn't go there.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) fn store_profile(&self, name: &str, bytes: &[u8]) -> bool {
+         self.profile_dir.as_deref().is_some_and(|dir| put(dir, &format!("{}.{PROFILE_EXT}", file_stem(name)), bytes))
+     }
+diff -ruN a/crates/format/src/lib.rs b/crates/format/src/lib.rs
+--- a/crates/format/src/lib.rs	2026-10-29 21:03:56
++++ b/crates/format/src/lib.rs	2026-10-30 13:25:18
+@@ -31,7 +31,7 @@
+ //! newer than they support.
+ #![forbid(unsafe_code)]
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod atomic;
+ mod legacy;
+ mod stream;
+@@ -45,7 +45,7 @@
+ use serde::{Deserialize, Serialize};
+ use vectorcraft_doc::{Document, ImageBlob};
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub use atomic::{sync_file, write_atomic, write_atomic_with, write_new_with};
+ use stream::{Gz, Indent, KeyScan, Out};
+ 
+@@ -69,14 +69,14 @@
+ /// so every file VectorCraft writes reads back. On wasm32 the cap is a quarter of the native
+ /// one: the JSON is deserialized into a document several times its size, and the 4 GiB address
+ /// space also holds the file, the JSON, the document and the app (#3587).
+-pub const MAX_JSON: u64 = if cfg!(target_arch = "wasm32") { 256 << 20 } else { 1 << 30 };
++pub const MAX_JSON: u64 = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 256 << 20 } else { 1 << 30 };
+ /// Most bytes one entry of the data after the JSON (an image, a placed document, the PDF, a
+ /// profile) may have in a compressed file.
+ pub const MAX_BLOB: u64 = 1 << 30;
+ /// Most bytes the entries after the JSON may have together in a compressed file: 1 GiB in the web
+ /// build, whose 4 GiB address space also holds the JSON, the document and the app, so 4 GiB of
+ /// entries failed to allocate rather than being refused.
+-pub const MAX_BLOBS: u64 = if cfg!(target_arch = "wasm32") { 1 << 30 } else { 4 << 30 };
++pub const MAX_BLOBS: u64 = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 1 << 30 } else { 4 << 30 };
+ /// Most bytes a compressed file whose JSON isn't followed by the marker where VectorCraft puts it
+ /// (hand-made or damaged files) may unpack to: it is unpacked whole.
+ const MAX_UNPACKED: u64 = 512 << 20;
+diff -ruN a/crates/geom/src/path.rs b/crates/geom/src/path.rs
+--- a/crates/geom/src/path.rs	2026-10-29 21:03:56
++++ b/crates/geom/src/path.rs	2026-10-30 13:25:18
+@@ -182,7 +182,7 @@
+ 
+ /// Most anchors [`with_anchor_budget`] lets paths read together: 32M (about 1.5 GB), 4M in the web
+ /// build.
+-pub const MAX_READ_ANCHORS: usize = if cfg!(target_arch = "wasm32") { 4 << 20 } else { 32 << 20 };
++pub const MAX_READ_ANCHORS: usize = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 4 << 20 } else { 32 << 20 };
+ 
+ std::thread_local! {
+     /// Anchors the paths being read on this thread may still have ([`with_anchor_budget`]).
+diff -ruN a/crates/pdf/Cargo.toml b/crates/pdf/Cargo.toml
+--- a/crates/pdf/Cargo.toml	2026-10-29 21:03:56
++++ b/crates/pdf/Cargo.toml	2026-10-30 13:25:18
+@@ -37,7 +37,7 @@
+ # The seed of the file key, salts and IVs (encrypt.rs).
+ getrandom = "0.4"
+ 
+-[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
++[target.'cfg(all(all(target_arch = "wasm32", not(target_os = "kandelo")), target_os = "unknown"))'.dependencies]
+ # The browser's crypto.getRandomValues.
+ getrandom = { version = "0.4", features = ["wasm_js"] }
+ 
+diff -ruN a/crates/plugins/src/registry.rs b/crates/plugins/src/registry.rs
+--- a/crates/plugins/src/registry.rs	2026-10-29 21:03:56
++++ b/crates/plugins/src/registry.rs	2026-10-30 13:25:18
+@@ -7,7 +7,7 @@
+ use std::sync::atomic::{AtomicU64, Ordering};
+ use std::sync::{Arc, Mutex, RwLock};
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use crate::Error;
+ use crate::{Limits, Plugin, Result};
+ 
+@@ -66,7 +66,7 @@
+ 
+ /// Reads a `.wasm` file (refusing anything that isn't a regular file or exceeds the module limit)
+ /// and loads it.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn load_file(path: &std::path::Path, limits: Limits) -> Result<Plugin> {
+     use std::io::Read;
+     let meta = std::fs::metadata(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
+@@ -94,14 +94,14 @@
+ /// Installs every `*.wasm` directly in `dir` (not recursive), in file-name order. A bad module is
+ /// reported and skipped, the others still load; so is a heavy one ([`crate::Budget::Heavy`]),
+ /// which installs only once the user agrees.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn load_folder(dir: &std::path::Path) -> Result<FolderReport> {
+     load_folder_where(dir, |_| Ok(()))
+ }
+ 
+ /// [`load_folder`], loading only the files `allow` accepts; the others are reported as failed
+ /// with its reason.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn load_folder_where(dir: &std::path::Path, allow: impl Fn(&std::path::Path) -> std::result::Result<(), String>) -> Result<FolderReport> {
+     let rd = std::fs::read_dir(dir).map_err(|e| Error::Io(format!("{}: {e}", dir.display())))?;
+     let mut files: Vec<std::path::PathBuf> =
+diff -ruN a/crates/plugins/src/runtime.rs b/crates/plugins/src/runtime.rs
+--- a/crates/plugins/src/runtime.rs	2026-10-29 21:03:56
++++ b/crates/plugins/src/runtime.rs	2026-10-30 13:25:18
+@@ -97,21 +97,21 @@
+ 
+ /// When a run must stop (native: a wall-clock deadline).
+ struct Deadline {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     at: std::time::Instant,
+ }
+ 
+ impl Deadline {
+     fn new(limits: &Limits) -> Self {
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let _ = limits;
+         Self {
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             at: std::time::Instant::now() + std::time::Duration::from_millis(limits.wall_time_ms),
+         }
+     }
+     fn check(&self) -> Result<()> {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if std::time::Instant::now() >= self.at {
+             return Err(Error::Limit("time budget".into()));
+         }
+diff -ruN a/crates/render/Cargo.toml b/crates/render/Cargo.toml
+--- a/crates/render/Cargo.toml	2026-10-29 21:03:56
++++ b/crates/render/Cargo.toml	2026-10-30 13:25:18
+@@ -28,7 +28,7 @@
+ png = "0.18"
+ log = { workspace = true }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ vello_cpu = { workspace = true, features = ["multithreading"] }
+ 
+ # The shared image store's budget (src/images.rs) follows the installed memory, which it reads with GlobalMemoryStatusEx
+diff -ruN a/crates/render/src/clock.rs b/crates/render/src/clock.rs
+--- a/crates/render/src/clock.rs	2026-10-29 21:03:56
++++ b/crates/render/src/clock.rs	2026-10-30 13:25:18
+@@ -1,10 +1,10 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn now() -> u64 {
+     use std::time::{SystemTime, UNIX_EPOCH};
+     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_micros() as u64).unwrap_or(0)
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn now() -> u64 {
+     0
+ }
+diff -ruN a/crates/render/src/images.rs b/crates/render/src/images.rs
+--- a/crates/render/src/images.rs	2026-10-29 21:03:56
++++ b/crates/render/src/images.rs	2026-10-30 13:25:18
+@@ -24,19 +24,19 @@
+ pub const IMAGE_CACHE_MAX: usize = 1 << 30;
+ 
+ /// The default budget on the web (a tab's memory is tight).
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn default_budget() -> usize {
+     256 << 20
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn default_budget() -> usize {
+     physical_memory().map_or(IMAGE_CACHE_MAX, budget_for)
+ }
+ 
+ /// The default budget on a machine with `memory` bytes installed: an eighth of it, at most
+ /// [`IMAGE_CACHE_MAX`].
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn budget_for(memory: u64) -> usize {
+     usize::try_from(memory / 8).unwrap_or(usize::MAX).min(IMAGE_CACHE_MAX)
+ }
+@@ -71,7 +71,7 @@
+     std::str::from_utf8(out).ok()?.trim().parse().ok()
+ }
+ 
+-#[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "freebsd", target_arch = "wasm32")))]
++#[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "freebsd", all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ fn physical_memory() -> Option<u64> {
+     None
+ }
+diff -ruN a/crates/render/src/paint.rs b/crates/render/src/paint.rs
+--- a/crates/render/src/paint.rs	2026-10-29 21:03:56
++++ b/crates/render/src/paint.rs	2026-10-30 13:25:18
+@@ -69,7 +69,7 @@
+ 
+ /// The most memory decoding one image may take: print rasters run to gigabytes (a 300 ppi roll,
+ /// 6614 x 59055 px, is 1.56 GB as RGBA), past the decoder's 512 MB default. The web keeps it.
+-const MAX_DECODE_ALLOC: u64 = if cfg!(target_arch = "wasm32") { 512 << 20 } else { 2 << 30 };
++const MAX_DECODE_ALLOC: u64 = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 512 << 20 } else { 2 << 30 };
+ 
+ thread_local! {
+     /// Images that couldn't be decoded (and so drew nothing) on this thread, counted for exports to
+diff -ruN a/crates/render/src/placed_document.rs b/crates/render/src/placed_document.rs
+--- a/crates/render/src/placed_document.rs	2026-10-29 21:03:56
++++ b/crates/render/src/placed_document.rs	2026-10-30 13:25:18
+@@ -300,7 +300,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod workers {
+     use std::sync::mpsc::{Sender, channel};
+     use std::sync::{Arc, LazyLock, Mutex};
+@@ -352,7 +352,7 @@
+     {
+         *lock(&SCHEDULED).entry(job.key.0.clone()).or_default() += 1;
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     let job = match workers::submit(Box::new(job)) {
+         Ok(()) => return,
+         Err(job) => *job,
+diff -ruN a/crates/render/src/threads.rs b/crates/render/src/threads.rs
+--- a/crates/render/src/threads.rs	2026-10-29 21:03:56
++++ b/crates/render/src/threads.rs	2026-10-30 13:25:18
+@@ -18,11 +18,11 @@
+ /// 10-core machine 8 workers render a 50,000-path page 1.4× faster than 4 (9 are slower again);
+ /// the pixels don't depend on the count (`pixels_do_not_depend_on_the_thread_count`).
+ pub fn default_threads() -> u16 {
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         0
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let o = THREADS_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed);
+         if o >= 0 {
+diff -ruN a/crates/svg/src/import/depth.rs b/crates/svg/src/import/depth.rs
+--- a/crates/svg/src/import/depth.rs	2026-10-29 21:03:56
++++ b/crates/svg/src/import/depth.rs	2026-10-30 13:25:18
+@@ -26,7 +26,7 @@
+ /// it). usvg uses about 15 kB of stack for each level: the importer runs on a thread with 16 MB
+ /// ([`vectorcraft_doc::depth::with_deep_stack`]), except on the web, where there is the one
+ /// stack: [`WEB_DEPTH`] there.
+-pub const MAX_ELEMENT_DEPTH: usize = if cfg!(target_arch = "wasm32") { WEB_DEPTH } else { 256 };
++pub const MAX_ELEMENT_DEPTH: usize = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { WEB_DEPTH } else { 256 };
+ 
+ /// The stack of the web build: rustc links `wasm32-unknown-unknown` with
+ /// `-z stack-size=1048576` (`rustc --print link-args` shows it), and the web app gives the linker
+diff -ruN a/crates/svg/src/import.rs b/crates/svg/src/import.rs
+--- a/crates/svg/src/import.rs	2026-10-29 21:03:56
++++ b/crates/svg/src/import.rs	2026-10-30 13:25:18
+@@ -25,7 +25,7 @@
+ 
+ /// Most objects an imported SVG may expand to: a guard against `<use>` and nested-image
+ /// expansion bombs (#3564).
+-pub const MAX_NODES: usize = if cfg!(target_arch = "wasm32") { 500_000 } else { 2_000_000 };
++pub const MAX_NODES: usize = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 500_000 } else { 2_000_000 };
+ 
+ mod convert;
+ mod importer;
+diff -ruN a/crates/text/src/fontdb/cache.rs b/crates/text/src/fontdb/cache.rs
+--- a/crates/text/src/fontdb/cache.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/cache.rs	2026-10-30 13:25:18
+@@ -14,7 +14,7 @@
+ 
+ /// One style of an installed family: a face, or a named instance of a variable font.
+ #[derive(Debug)]
+-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++#[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+ pub(super) struct CatalogFace {
+     pub(super) style: String,
+     pub(super) path: PathBuf,
+diff -ruN a/crates/text/src/fontdb/db.rs b/crates/text/src/fontdb/db.rs
+--- a/crates/text/src/fontdb/db.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/db.rs	2026-10-30 13:25:18
+@@ -1,24 +1,24 @@
+ use super::build::make_face;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::build::{style_italic, style_weight};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::cache::CatalogFace;
+ use super::cache::{CanonicalNames, Catalog, GlyphCache, PostScriptNames};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::dirs::confined_font_dirs;
+ use super::face::{BUNDLED, FontBytes, FontFace, Instances};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::names::SysFallback;
+ use super::names::name;
+ use super::scan::enumerate_faces;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::scan::{file_face_names, is_font_file};
+ #[cfg(test)]
+ use super::traits::faces_published;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::traits::{Alias, FaceStyle};
+ use super::{Arc, AtomicU64, FontDb, FontPaths, HashMap, Mutex, Ordering, Path, PathBuf, RwLock, StringId};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::{ScanStamp, modified};
+ 
+ impl FontDb {
+@@ -57,16 +57,16 @@
+             font_paths,
+             aliases: RwLock::new(HashMap::new()),
+             canonical_cache: Mutex::new(CanonicalNames::new()),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             cataloged: std::sync::OnceLock::new(),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             version_scanned: RwLock::new(std::collections::HashSet::new()),
+             family_cache: Mutex::new(None),
+             menu_cache: Mutex::new(None),
+             generation: AtomicU64::new(0),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             sys: Mutex::new(SysFallback { enabled: true, ..Default::default() }),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             stamp: Mutex::new(None),
+             instances: Mutex::new(Instances::default()),
+         }
+@@ -75,11 +75,11 @@
+     /// Enable or disable the lazy system-font fallback for characters the loaded fonts lack
+     /// (native only; on by default).
+     pub fn set_system_fallback(&self, on: bool) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             self.sys.lock().unwrap_or_else(|e| e.into_inner()).enabled = on;
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let _ = on;
+     }
+ 
+@@ -248,7 +248,7 @@
+     /// Catalog the installed fonts unless that has been done: the first caller scans the font
+     /// folders, any other waits for that scan to finish. A no-op on wasm.
+     pub(super) fn ensure_catalog(&self) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         self.cataloged.get_or_init(|| {
+             self.scan_font_dirs();
+         });
+@@ -258,7 +258,7 @@
+     /// (opening a file, the font menus) doesn't wait for the scan. A no-op once they are
+     /// cataloged, and on wasm.
+     pub fn scan_in_background(&'static self) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if self.cataloged.get().is_none() {
+             // A failed spawn leaves the scan to the first lookup that needs it.
+             let _ = std::thread::Builder::new().name("font-scan".into()).spawn(move || self.ensure_catalog());
+@@ -269,7 +269,7 @@
+     /// found (native only). Font data is loaded when a cataloged family is first resolved. Faces
+     /// loaded from files the scan no longer finds are dropped. Returns the number of faces
+     /// cataloged.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn load_system_fonts(&self) -> usize {
+         // The first scan, or a rescan once it is done (never both at once).
+         let mut first = None;
+@@ -282,17 +282,17 @@
+     /// them. Costs a look at each folder the scan read, not a scan. `false` before the first scan
+     /// and on wasm.
+     pub fn installed_fonts_changed(&self) -> bool {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             let paths = self.font_paths.get();
+             let stamp = self.stamp.lock().unwrap_or_else(|e| e.into_inner());
+             stamp.as_ref().is_some_and(|s| s.paths != paths || s.modified.iter().any(|(p, t)| modified(p) != *t))
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         false
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn scan_font_dirs(&self) -> usize {
+         // Files may have been installed since: other versions are looked for again.
+         self.version_scanned.write().unwrap_or_else(|e| e.into_inner()).clear();
+diff -ruN a/crates/text/src/fontdb/dirs.rs b/crates/text/src/fontdb/dirs.rs
+--- a/crates/text/src/fontdb/dirs.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/dirs.rs	2026-10-30 13:25:18
+@@ -1,7 +1,7 @@
+ use super::{Path, PathBuf};
+ 
+ /// A font file holding `tables` (tag, data), sorted by tag as table directories are.
+-#[cfg(any(test, not(target_arch = "wasm32")))]
++#[cfg(any(test, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ pub(crate) fn sfnt_of(tables: &[(&[u8; 4], &[u8])]) -> Option<Vec<u8>> {
+     let mut tables = tables.to_vec();
+     tables.sort_by_key(|t| *t.0);
+@@ -30,7 +30,7 @@
+ pub type PlatformFontFiles = fn() -> Vec<String>;
+ 
+ /// What lists the platform's font files, set by the app ([`set_platform_font_files`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ static PLATFORM_FONT_FILES: std::sync::OnceLock<PlatformFontFiles> = std::sync::OnceLock::new();
+ 
+ /// Have [`system_font_dirs`] add the font files `list` gives (full paths) outside the font
+@@ -41,16 +41,16 @@
+ /// CoreText's font manager has available, which apps and font managers can register from any
+ /// folder. Only the first call counts.
+ pub fn set_platform_font_files(list: PlatformFontFiles) {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     // A second call keeps the first lister, as documented.
+     let _ = PLATFORM_FONT_FILES.set(list);
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let _ = list;
+ }
+ 
+ /// Folders the user adds to the font scan (Preferences › Type › Additional Fonts Folder, #683),
+ /// read with their subfolders after the platform's.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ static USER_FONT_DIRS: std::sync::RwLock<Vec<PathBuf>> = std::sync::RwLock::new(Vec::new());
+ 
+ /// Have [`system_font_dirs`] also read `dirs` (#683), so the fonts in them are listed and used as
+@@ -64,22 +64,22 @@
+ /// them: the scan then reads only what is inside them, not files or folders that links in them
+ /// lead to elsewhere, since the caller could plant such a link.
+ pub fn set_user_font_dirs_confined(dirs: Vec<PathBuf>, confined: bool) {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         *USER_FONT_DIRS.write().unwrap_or_else(std::sync::PoisonError::into_inner) = dirs;
+         USER_FONT_DIRS_CONFINED.store(confined, std::sync::atomic::Ordering::Relaxed);
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let _ = (dirs, confined);
+ }
+ 
+ /// Whether [`USER_FONT_DIRS`] were chosen by a confined caller ([`set_user_font_dirs_confined`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ static USER_FONT_DIRS_CONFINED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+ 
+ /// The folders, as found on disk, that the scan reads only the inside of
+ /// ([`set_user_font_dirs_confined`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn confined_font_dirs() -> Vec<PathBuf> {
+     if !USER_FONT_DIRS_CONFINED.load(std::sync::atomic::Ordering::Relaxed) {
+         return vec![];
+@@ -89,14 +89,14 @@
+ 
+ /// The folders [`set_user_font_dirs`] added (none on wasm).
+ pub fn user_font_dirs() -> Vec<PathBuf> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     return USER_FONT_DIRS.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     Vec::new()
+ }
+ 
+ /// VectorCraft's own Fonts folder, set by the app ([`set_app_font_dir`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ static APP_FONT_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+ 
+ /// Have [`system_font_dirs`] read `dir` with its subfolders: VectorCraft's own Fonts folder, which
+@@ -104,18 +104,18 @@
+ /// the first scan, as they install [`set_platform_font_files`]. A folder that doesn't exist yet is
+ /// read once it does. Only the first call counts. Ignored on wasm.
+ pub fn set_app_font_dir(dir: PathBuf) {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     // A second call keeps the first folder, as documented.
+     let _ = APP_FONT_DIR.set(dir);
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let _ = dir;
+ }
+ 
+ /// The folder [`set_app_font_dir`] set: none before that, and none on wasm.
+ pub fn app_font_dir() -> Option<&'static Path> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     return APP_FONT_DIR.get().map(PathBuf::as_path);
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     None
+ }
+ 
+@@ -125,7 +125,7 @@
+ /// ([`set_user_font_dirs`]), scanned by [`FontDb::global`].
+ pub fn system_font_dirs() -> Vec<PathBuf> {
+     let mut dirs: Vec<PathBuf> = Vec::new();
+-    if cfg!(target_arch = "wasm32") {
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         return dirs;
+     }
+     let home = std::env::var_os("HOME").map(PathBuf::from);
+@@ -173,7 +173,7 @@
+         }
+     }
+     dirs.extend(app_font_dir().map(Path::to_path_buf));
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if let Some(list) = PLATFORM_FONT_FILES.get() {
+         let files = fonts_outside(list(), &dirs);
+         dirs.extend(files);
+@@ -203,7 +203,7 @@
+ /// The full paths among `registered` (font registrations' data) that aren't in `font_dirs`
+ /// (ignoring case, as Windows paths do), sorted and deduplicated. File names alone are files in
+ /// the Windows font folder, which is scanned anyway. The count is capped.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn fonts_outside(registered: impl IntoIterator<Item = String>, font_dirs: &[PathBuf]) -> Vec<PathBuf> {
+     const MAX_REGISTERED: usize = 1 << 16;
+     let lower = |p: &Path| PathBuf::from(p.to_string_lossy().to_lowercase());
+diff -ruN a/crates/text/src/fontdb/lookup.rs b/crates/text/src/fontdb/lookup.rs
+--- a/crates/text/src/fontdb/lookup.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/lookup.rs	2026-10-30 13:25:18
+@@ -1,13 +1,13 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::PathBuf;
+ use super::build::{instanced, style_distance, style_italic, style_weight};
+ use super::cache::Catalog;
+ use super::face::{FALLBACK_FAMILY, FontFace, MAX_LIVE_INSTANCES, Variation, VariationAxis};
+ use super::glyph_pen::{FlipPen, svg_drawn};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::names::SYSTEM_FALLBACKS;
+ use super::names::{norm, norm_chars, script_families};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::scan::{enumerate_faces, font_files};
+ use super::traits::{Alias, FontMatch, FontTraits};
+ use super::{
+@@ -146,7 +146,7 @@
+     /// Load the files of the installed `family`, adding all their faces at once
+     /// ([`Self::add_fonts`]). Returns whether the family is loaded now: by this call, or by another
+     /// thread meanwhile.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn load_cataloged(&self, family: &str) -> bool {
+         let mut paths: Vec<PathBuf> =
+             self.read_catalog().get(&family.to_ascii_lowercase()).map(|c| c.faces.iter().map(|cf| cf.path.clone()).collect()).unwrap_or_default();
+@@ -170,7 +170,7 @@
+         // The family, or this style of it, is installed but not loaded yet. Looked for again
+         // whether or not this call loaded it: another thread may have just done so (then this
+         // load adds nothing, but the face is there).
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if found.is_none() || self.is_cataloged(family, style) {
+             self.load_cataloged(family);
+             if let Some(f) = self.find(family, style) {
+@@ -215,19 +215,19 @@
+     /// Load the installed files of `family` once (other versions of faces already loaded from
+     /// elsewhere); a no-op on wasm, where no fonts are installed.
+     fn load_family_files(&self, family: &str) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             let key = family.to_ascii_lowercase();
+             if self.version_scanned.write().unwrap_or_else(|e| e.into_inner()).insert(key) {
+                 self.load_cataloged(family);
+             }
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         let _ = family;
+     }
+ 
+     /// Is `style` of `family` among the installed fonts?
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn is_cataloged(&self, family: &str, style: &str) -> bool {
+         let ns = norm(style);
+         self.read_catalog().get(&family.to_ascii_lowercase()).is_some_and(|c| c.faces.iter().any(|cf| norm(&cf.style) == ns))
+@@ -365,7 +365,7 @@
+         if let Some(f) = self.family_fallback(c, exclude, prefer, weight, italic) {
+             return Some(f);
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if self.load_families(c, prefer)
+             && let Some(f) = self.family_fallback(c, exclude, prefer, weight, italic)
+         {
+@@ -374,7 +374,7 @@
+         if let Some(f) = self.loaded_fallback(c, exclude, weight, italic) {
+             return Some(f);
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         self.system_fallback(c);
+         // Another lookup may have loaded the face while this one searched. Loading no new
+         // faces does not mean no face covers the character (as with `face`'s catalog lookup).
+@@ -402,7 +402,7 @@
+ 
+     /// Load the first of the installed `families` not loaded yet that covers `c` (with system
+     /// fallback on). Returns whether one was loaded.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn load_families(&self, c: char, families: &[&str]) -> bool {
+         if families.is_empty() || !self.sys.lock().unwrap_or_else(|e| e.into_inner()).enabled {
+             return false;
+@@ -432,7 +432,7 @@
+ 
+     /// Load a system font covering `c` (preferred fallback families first, then any cataloged
+     /// file under 40 MB). Returns true if one was loaded. Misses are remembered.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn system_fallback(&self, c: char) -> bool {
+         if c.is_control() || c.is_whitespace() {
+             return false;
+diff -ruN a/crates/text/src/fontdb/names.rs b/crates/text/src/fontdb/names.rs
+--- a/crates/text/src/fontdb/names.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/names.rs	2026-10-30 13:25:18
+@@ -1,6 +1,6 @@
+ use super::{MetadataProvider, StringId};
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[derive(Default)]
+ pub(super) struct SysFallback {
+     pub(super) enabled: bool,
+@@ -40,7 +40,7 @@
+ }
+ 
+ /// Families tried (when installed) for characters the loaded fonts lack: CJK, symbols, emoji.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) const SYSTEM_FALLBACKS: &[&str] = &[
+     "Helvetica Neue",
+     "Arial",
+diff -ruN a/crates/text/src/fontdb/scan.rs b/crates/text/src/fontdb/scan.rs
+--- a/crates/text/src/fontdb/scan.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/scan.rs	2026-10-30 13:25:18
+@@ -1,5 +1,5 @@
+ use super::build::{style_italic, style_weight};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::dirs::sfnt_of;
+ use super::face::{MAX_AXES, MAX_INSTANCES};
+ use super::names::{all_names, name, norm};
+@@ -111,7 +111,7 @@
+ 
+ /// The font files held by the file at `path`: its contents, or for a suitcase font the fonts in
+ /// its resource fork ([`crate::suitcase`]). None when it can't be read.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn font_files(path: &Path) -> Vec<Vec<u8>> {
+     if crate::suitcase::is_suitcase(path) {
+         return crate::suitcase::read_fonts(path);
+@@ -122,14 +122,14 @@
+ /// The tables holding glyphs the font engine draws: TrueType, CFF, CFF2 and VARC outlines, and
+ /// `sbix` and `CBDT` colour bitmaps. A face with none of them (outlines in Apple's `hvgl` table,
+ /// monochrome bitmaps only) draws nothing.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const OUTLINE_TABLES: [&[u8; 4]; 6] = [b"glyf", b"CFF ", b"CFF2", b"VARC", b"sbix", b"CBDT"];
+ 
+ /// The styles of every face in the font file at `path` ([`face_styles`]), reading only its table
+ /// directories and `name`, `fvar` and `OS/2` tables: a scan opens hundreds of font files, many of
+ /// them megabytes long. Faces without outlines the font engine draws (no [`OUTLINE_TABLES`] table)
+ /// are left out.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn file_face_names(path: &Path) -> Vec<FaceStyle> {
+     file_face_names_within(path, MAX_FACES, u64::MAX)
+ }
+@@ -137,7 +137,7 @@
+ /// [`file_face_names`], reading at most `max_faces` faces and `max_read` bytes of the file in all.
+ /// A suitcase font's resource fork is read whole when it is at most `max_read` bytes long, and the
+ /// limits then apply to each of its fonts; a longer fork gives none.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn file_face_names_within(path: &Path, max_faces: u32, max_read: u64) -> Vec<FaceStyle> {
+     if crate::suitcase::is_suitcase(path) {
+         if crate::suitcase::fork_len(path) > max_read {
+@@ -155,7 +155,7 @@
+ }
+ 
+ /// [`file_face_names_within`] for the font file `file` reads.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn reader_face_names_within(mut file: impl std::io::Read + std::io::Seek, max_faces: u32, max_read: u64) -> Vec<FaceStyle> {
+     use std::io::SeekFrom;
+     /// The largest table read from a (possibly damaged) file.
+@@ -223,11 +223,11 @@
+ /// Whether the file at `path` is a suitcase font ([`crate::suitcase`]): on macOS, a file with
+ /// nothing in its data and its fonts in its resource fork. Never on the web.
+ pub fn is_suitcase(path: &Path) -> bool {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         crate::suitcase::is_suitcase(path)
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         let _ = path;
+         false
+diff -ruN a/crates/text/src/fontdb/wanted.rs b/crates/text/src/fontdb/wanted.rs
+--- a/crates/text/src/fontdb/wanted.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb/wanted.rs	2026-10-30 13:25:18
+@@ -1,5 +1,5 @@
+ use super::names::norm;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::scan::{file_face_names_within, is_font_file};
+ use super::traits::FaceStyle;
+ use super::{HashMap, Path};
+@@ -17,7 +17,7 @@
+ /// Fonts to look for in font files: [`WantedFonts::provided_by`] tells which of them a file
+ /// provides.
+ #[derive(Debug, Default)]
+-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++#[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+ pub struct WantedFonts {
+     fonts: Vec<WantedFont>,
+     /// The indexes of the fonts by every name a face could answer to them by: the family as given
+@@ -27,9 +27,9 @@
+ 
+ impl WantedFonts {
+     /// The most faces and bytes of one file a search reads.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     const SEARCH_FACES: u32 = 64;
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     const SEARCH_READ: u64 = 8 << 20;
+ 
+     pub fn new(fonts: &[WantedFont]) -> Self {
+@@ -61,7 +61,7 @@
+     /// it, when it is a font file by its extension ([`is_font_file`]) or a suitcase font whose
+     /// resource fork is at most 8 MB long. Sorted; none on the web.
+     pub fn provided_by(&self, path: &Path) -> Vec<usize> {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             if !is_font_file(path) && !crate::suitcase::is_suitcase(path) {
+                 return Vec::new();
+@@ -69,7 +69,7 @@
+             let faces = file_face_names_within(path, Self::SEARCH_FACES, Self::SEARCH_READ);
+             self.provided_by_faces(&faces)
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         {
+             let _ = path;
+             Vec::new()
+@@ -77,7 +77,7 @@
+     }
+ 
+     /// [`Self::provided_by`] for the faces of a file.
+-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++    #[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+     fn provided_by_faces(&self, faces: &[FaceStyle]) -> Vec<usize> {
+         let mut candidates: Vec<usize> = Vec::new();
+         for f in faces {
+@@ -100,7 +100,7 @@
+ /// Whether the faces of a font file, cataloged by a rescan, make [`FontDb::resolve`] find `w`
+ /// exactly in one of them: [`FontDb::canonical`] and [`FontDb::find`] over these faces, as they
+ /// would run once the file is cataloged.
+-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++#[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+ fn provides(w: &WantedFont, faces: &[FaceStyle]) -> bool {
+     let sk = norm(&w.style);
+     // A face of `family` with the style among its style names, as `find` looks for it once the
+diff -ruN a/crates/text/src/fontdb.rs b/crates/text/src/fontdb.rs
+--- a/crates/text/src/fontdb.rs	2026-10-29 21:03:56
++++ b/crates/text/src/fontdb.rs	2026-10-30 13:25:18
+@@ -33,7 +33,7 @@
+ #[cfg(test)]
+ use cache::GlyphCache;
+ use cache::{CanonicalNames, Catalog, GlyphColours, GlyphImages, PostScriptNames};
+-#[cfg(all(not(target_arch = "wasm32"), test))]
++#[cfg(all(not(all(target_arch = "wasm32", not(target_os = "kandelo"))), test))]
+ pub(crate) use dirs::fonts_outside;
+ #[cfg(test)]
+ pub(crate) use dirs::sfnt_of;
+@@ -46,13 +46,13 @@
+ pub(crate) use face::MAX_LIVE_INSTANCES;
+ pub use face::{FALLBACK_FAMILY, FontFace, IcfMargins};
+ pub(crate) use glyph_pen::FlipPen;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use names::SysFallback;
+ #[cfg(test)]
+ pub use names::THAI_FAMILIES;
+ #[cfg(test)]
+ use names::{native_family_name, norm, pick_native_label};
+-#[cfg(all(not(target_arch = "wasm32"), test))]
++#[cfg(all(not(all(target_arch = "wasm32", not(target_os = "kandelo"))), test))]
+ pub(crate) use scan::file_face_names_within;
+ #[cfg(test)]
+ use scan::{MAX_FACES, enumerate_faces};
+@@ -76,7 +76,7 @@
+     /// The installed faces by PostScript name (documents name fonts so: PDF, EPS, .ai).
+     postscript: RwLock<PostScriptNames>,
+     /// Where the system font scan looks.
+-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++    #[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+     font_paths: FontPaths,
+     /// The installed fonts' other names (localized, legacy, full, PostScript) by normalized name.
+     aliases: RwLock<HashMap<String, Vec<Alias>>>,
+@@ -85,28 +85,28 @@
+     canonical_cache: Mutex<CanonicalNames>,
+     /// Set once the font folders have been scanned. Lookups by family name wait for the first
+     /// scan, so what they find never depends on what ran before them.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     cataloged: std::sync::OnceLock<()>,
+     /// Families (lowercased) whose installed files were all loaded to find other versions of their
+     /// faces (see [`FontDb::versions`]); a rescan forgets them.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     version_scanned: RwLock<std::collections::HashSet<String>>,
+     /// [`FontDb::family_list`], built on demand and dropped when fonts are added or rescanned.
+     family_cache: Mutex<Option<Arc<[String]>>>,
+     menu_cache: Mutex<Option<MenuFamilies>>,
+     generation: AtomicU64,
+     /// System fallback state: characters no system font covers.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     sys: Mutex<SysFallback>,
+     /// What the last scan read, to tell when fonts were installed or removed since.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     stamp: Mutex<Option<ScanStamp>>,
+     /// Faces instanced at the axis settings of type's Variable Font sliders ([`FontDb::instance`]).
+     instances: Mutex<Instances>,
+ }
+ 
+ /// Where a database's system font scan looks: folders (read with their subfolders) and font files.
+-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++#[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+ enum FontPaths {
+     Fixed(Vec<PathBuf>),
+     /// The platform's ([`system_font_dirs`]), looked up again by each scan: fonts registered and
+@@ -114,7 +114,7 @@
+     System,
+ }
+ 
+-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
++#[cfg_attr(all(target_arch = "wasm32", not(target_os = "kandelo")), allow(dead_code))]
+ impl FontPaths {
+     fn get(&self) -> Vec<PathBuf> {
+         match self {
+@@ -126,13 +126,13 @@
+ 
+ /// What a system font scan read: the paths it started from, and when each folder it listed (and
+ /// font file named by itself) last changed. Installing or removing a font changes its folder's.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ struct ScanStamp {
+     paths: Vec<PathBuf>,
+     modified: Vec<(PathBuf, Option<std::time::SystemTime>)>,
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn modified(path: &Path) -> Option<std::time::SystemTime> {
+     std::fs::metadata(path).and_then(|m| m.modified()).ok()
+ }
+diff -ruN a/crates/text/src/lib.rs b/crates/text/src/lib.rs
+--- a/crates/text/src/lib.rs	2026-10-29 21:03:56
++++ b/crates/text/src/lib.rs	2026-10-30 13:25:18
+@@ -24,7 +24,7 @@
+ mod kashida;
+ mod layout;
+ mod shape;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod suitcase;
+ mod svg_glyph;
+ #[cfg(any(test, feature = "test-fonts"))]
+diff -ruN a/crates/text/src/shape.rs b/crates/text/src/shape.rs
+--- a/crates/text/src/shape.rs	2026-10-29 21:03:56
++++ b/crates/text/src/shape.rs	2026-10-30 13:25:18
+@@ -279,10 +279,10 @@
+ /// models on the web); empty when `text` has none of those scripts. Offsets elsewhere (around
+ /// other text) are UAX #14's breaks.
+ pub(crate) fn unspaced_word_breaks(text: &str) -> Vec<usize> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     static SEGMENTER: std::sync::LazyLock<icu_segmenter::LineSegmenterBorrowed<'static>> =
+         std::sync::LazyLock::new(|| icu_segmenter::LineSegmenter::new_dictionary(Default::default()));
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     static SEGMENTER: std::sync::LazyLock<icu_segmenter::LineSegmenterBorrowed<'static>> =
+         std::sync::LazyLock::new(|| icu_segmenter::LineSegmenter::new_auto(Default::default()));
+     if !text.chars().any(is_unspaced_script) {
+diff -ruN a/crates/tools/src/builder/cache.rs b/crates/tools/src/builder/cache.rs
+--- a/crates/tools/src/builder/cache.rs	2026-10-29 21:03:56
++++ b/crates/tools/src/builder/cache.rs	2026-10-30 13:25:18
+@@ -55,7 +55,7 @@
+ }
+ 
+ /// Builds the map of `shapes` ([`build_map`]) on a new thread; None when no thread starts.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn spawn_build(shapes: Vec<po::Shape>, live: bool, gap: f64) -> Option<Receiver<BuilderMap>> {
+     let (tx, done) = std::sync::mpsc::channel();
+     let spawned = std::thread::Builder::new().name("vectorcraft-region-map".into()).spawn(move || {
+@@ -66,7 +66,7 @@
+ }
+ 
+ /// The web build has no threads.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn spawn_build(_shapes: Vec<po::Shape>, _live: bool, _gap: f64) -> Option<Receiver<BuilderMap>> {
+     None
+ }
+@@ -176,7 +176,7 @@
+         }
+         let (shapes, outlines) = self.inputs(cx, open_filled_as_closed);
+         let segments: usize = shapes.iter().map(|s| s.path.subpaths.iter().map(|sp| sp.segment_count()).sum::<usize>()).sum();
+-        if segments > BACKGROUND_SEGMENTS && cfg!(not(target_arch = "wasm32")) {
++        if segments > BACKGROUND_SEGMENTS && cfg!(not(all(target_arch = "wasm32", not(target_os = "kandelo")))) {
+             if let Some(done) = spawn_build(shapes, self.live, self.gap) {
+                 self.pending = Some(Pending { key, outlines, done });
+                 return None;
+diff -ruN a/crates/trace/src/layers.rs b/crates/trace/src/layers.rs
+--- a/crates/trace/src/layers.rs	2026-10-29 21:03:56
++++ b/crates/trace/src/layers.rs	2026-10-30 13:25:18
+@@ -458,7 +458,7 @@
+ }
+ 
+ /// `f` of each of `items`, in order, spread over the available cores, at most `at_a_time` at once.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn parallel_map_at_most<T: Sync, R: Send>(at_a_time: usize, items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+     let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(items.len()).min(at_a_time);
+     if threads <= 1 {
+@@ -488,7 +488,7 @@
+ }
+ 
+ /// `f` of each of `items`, in order (no threads on the web).
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(crate) fn parallel_map_at_most<T: Sync, R: Send>(_: usize, items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+     items.iter().map(f).collect()
+ }
+diff -ruN a/crates/trace/src/raster.rs b/crates/trace/src/raster.rs
+--- a/crates/trace/src/raster.rs	2026-10-29 21:03:56
++++ b/crates/trace/src/raster.rs	2026-10-30 13:25:18
+@@ -114,7 +114,7 @@
+         // A deeper image (16 bits a channel) that needs more fails with a decode error.
+         let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|e| TraceError::Decode(e.to_string()))?;
+         let mut limits = image::Limits::default();
+-        limits.max_alloc = Some(if cfg!(target_arch = "wasm32") { 512 << 20 } else { MAX_SOURCE_PIXELS * 4 });
++        limits.max_alloc = Some(if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { 512 << 20 } else { MAX_SOURCE_PIXELS * 4 });
+         reader.limits(limits);
+         let img = reader.decode().map_err(decode_err)?.into_rgba8();
+         let (w, h) = img.dimensions();
+diff -ruN a/crates/ui-egui/Cargo.toml b/crates/ui-egui/Cargo.toml
+--- a/crates/ui-egui/Cargo.toml	2026-10-29 21:03:56
++++ b/crates/ui-egui/Cargo.toml	2026-10-30 13:25:18
+@@ -51,11 +51,11 @@
+ log = { workspace = true }
+ 
+ # Floating panels open in OS windows of their own on the desktop; on the web they stay in the page.
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ craft-ui = { workspace = true, features = ["native-windows"] }
+ craft-update = { workspace = true }
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies]
+ # `now_ms` (src/lib.rs) reads the page's `performance.now()` with this crate in the web build. It is
+ # MIT OR Apache-2.0 and already in the build through eframe.
+ web-time = "1"
+diff -ruN a/crates/ui-egui/src/app/fonts.rs b/crates/ui-egui/src/app/fonts.rs
+--- a/crates/ui-egui/src/app/fonts.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/app/fonts.rs	2026-10-30 13:25:18
+@@ -30,7 +30,7 @@
+             let _ = tx.send(vectorcraft_text::FontDb::global().installed_fonts_changed());
+         };
+         let spawned =
+-            if cfg!(target_arch = "wasm32") { None } else { std::thread::Builder::new().name("font-check".into()).spawn(look.clone()).ok() };
++            if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { None } else { std::thread::Builder::new().name("font-check".into()).spawn(look.clone()).ok() };
+         if spawned.is_none() {
+             look();
+         }
+diff -ruN a/crates/ui-egui/src/app/input.rs b/crates/ui-egui/src/app/input.rs
+--- a/crates/ui-egui/src/app/input.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/app/input.rs	2026-10-30 13:25:18
+@@ -1,5 +1,5 @@
+ use super::{Arc, Ordering, VectorcraftApp, graphics, native_menu, shortcuts, take_frame_once};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::{fileio, place};
+ 
+ impl VectorcraftApp {
+@@ -23,13 +23,13 @@
+         // path; it writes through `SystemClipboard` and leaves `clipboard_out` empty.
+         self.flush_clipboard_out(ctx);
+         // Native only: the web host reads dropped files asynchronously and feeds the inboxes.
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         self.take_dropped_files(ctx);
+     }
+ 
+     /// Files dropped on the window: documents, libraries, presets, plug-ins and shortcut sets
+     /// opened, pictures and text placed on the canvas ([`Self::drop_target`]).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn take_dropped_files(&mut self, ctx: &egui::Context) {
+         let (dropped, shift) = ctx.input(|i| (i.raw.dropped_files.clone(), i.modifiers.shift));
+         self.open_dropped_files(dropped, place::drag_pos(ctx), shift);
+@@ -37,7 +37,7 @@
+ 
+     /// Files dropped on the main window or on a floating panel's own OS window, opened or placed
+     /// by kind; `pos` is the drop point in the main window, where the backend reports one.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(crate) fn open_dropped_files(&mut self, dropped: Vec<egui::DroppedFileHandle>, pos: Option<egui::Pos2>, shift: bool) {
+         if dropped.is_empty() {
+             return;
+diff -ruN a/crates/ui-egui/src/app/links.rs b/crates/ui-egui/src/app/links.rs
+--- a/crates/ui-egui/src/app/links.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/app/links.rs	2026-10-30 13:25:18
+@@ -1,4 +1,4 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::dialogs;
+ use super::{VectorcraftApp, browsable_url};
+ 
+@@ -45,7 +45,7 @@
+     /// worker thread and act on the changed ones as Preferences › File Handling › Update Links
+     /// says ([`vectorcraft_engine::link_watch`]). No look starts while a dialog is open, so an
+     /// Ask When Modified question never goes unseen.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub(super) fn tick_link_updates(&mut self, ctx: &egui::Context, now: f64) {
+         if let Some(r) = self.session.poll_link_scan() {
+             match r {
+diff -ruN a/crates/ui-egui/src/app.rs b/crates/ui-egui/src/app.rs
+--- a/crates/ui-egui/src/app.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/app.rs	2026-10-30 13:25:18
+@@ -2,7 +2,7 @@
+ use super::clock::now_ms;
+ use super::clock::now_secs;
+ use super::services::{Services, browsable_url};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::state::FONT_INSTALL_POLL;
+ use super::state::{
+     CaptureEpoch, GeometryStamp, InputGeneration, MAX_PENDING_SCREENSHOTS, MAX_SCREENSHOT_BYTES, MAX_SCREENSHOT_TOTAL_BYTES, PendingScreenshot,
+@@ -57,7 +57,7 @@
+                 last_ms: 0.0,
+                 moved: false,
+                 from_worker: false,
+-                waits_for_still: cfg!(target_arch = "wasm32"),
++                waits_for_still: cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))),
+                 still: None,
+                 fill: None,
+                 fill_worker: None,
+@@ -112,7 +112,7 @@
+             picks: picks::Picks::default(),
+             screen_sampler: None,
+             font_check: None,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             font_install_check_at: f64::NEG_INFINITY,
+             paste_chord: Default::default(),
+             // Held keys repeat their command (Cmd+= keeps zooming in).
+@@ -275,7 +275,7 @@
+             self.system_paste_at = now;
+             self.system_paste = wanted && self.system_clipboard_pasteable();
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if !(0.0..FONT_INSTALL_POLL).contains(&(now - self.font_install_check_at)) {
+             self.font_install_check_at = now;
+             // Read on the next frame the app draws anyway: an idle app isn't woken for it.
+@@ -292,7 +292,7 @@
+         plugin_runs::poll(self);
+         trace_runs::poll(self);
+         placing::poll(self);
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         self.tick_link_updates(ctx, now);
+         if !self.background.jobs.is_empty()
+             || !self.opening.pending.is_empty()
+diff -ruN a/crates/ui-egui/src/background.rs b/crates/ui-egui/src/background.rs
+--- a/crates/ui-egui/src/background.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/background.rs	2026-10-30 13:25:18
+@@ -84,7 +84,7 @@
+ impl Background {
+     /// The worker's channels, started on first use (`None` on wasm, which has no threads).
+     fn worker(&mut self) -> Option<&Sender<Task>> {
+-        if cfg!(target_arch = "wasm32") {
++        if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+             return None;
+         }
+         if self.worker.is_none() {
+diff -ruN a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
+--- a/crates/ui-egui/src/chrome.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/chrome.rs	2026-10-30 13:25:18
+@@ -134,7 +134,7 @@
+ /// does the web build (the browser tab has no document title), nor an embedder that never
+ /// turned the preference on.
+ pub fn system_title_bar(app: &VectorcraftApp) -> bool {
+-    !app.custom_titlebar && app.session.prefs.system_title_bar && !cfg!(any(target_os = "macos", target_arch = "wasm32"))
++    !app.custom_titlebar && app.session.prefs.system_title_bar && !cfg!(any(target_os = "macos", all(target_arch = "wasm32", not(target_os = "kandelo"))))
+ }
+ 
+ /// The OS window title: the active document's name suffixed with the app name (a `*` prefix
+diff -ruN a/crates/ui-egui/src/clipboard_probe.rs b/crates/ui-egui/src/clipboard_probe.rs
+--- a/crates/ui-egui/src/clipboard_probe.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/clipboard_probe.rs	2026-10-30 13:25:18
+@@ -31,7 +31,7 @@
+     /// Start the worker. `None` on wasm, or when the thread can't be spawned: the caller then falls
+     /// back to the in-line check.
+     pub(crate) fn start(make: ClipboardProbeFactory, ctx: egui::Context) -> Option<Self> {
+-        if cfg!(target_arch = "wasm32") {
++        if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+             return None;
+         }
+         let (wants, wanted_rx) = std::sync::mpsc::channel();
+diff -ruN a/crates/ui-egui/src/clock.rs b/crates/ui-egui/src/clock.rs
+--- a/crates/ui-egui/src/clock.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/clock.rs	2026-10-30 13:25:18
+@@ -3,14 +3,14 @@
+ /// pacing and deadlines use this, not egui's `InputState::time`: a logic-only pass replays the
+ /// last shown frame's time, and a wall clock jumps with the system's.
+ pub fn now_secs() -> f64 {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         use std::sync::LazyLock;
+         use std::time::Instant;
+         static START: LazyLock<Instant> = LazyLock::new(Instant::now);
+         START.elapsed().as_secs_f64()
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         use std::sync::LazyLock;
+         use web_time::Instant;
+diff -ruN a/crates/ui-egui/src/cursors.rs b/crates/ui-egui/src/cursors.rs
+--- a/crates/ui-egui/src/cursors.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/cursors.rs	2026-10-30 13:25:18
+@@ -635,7 +635,7 @@
+ /// Does the window show the glyphs as OS cursors ([`Images`])? Not on macOS, which sizes a cursor
+ /// bitmap in points (a Retina one would show twice as big, or blurred), nor on the web (eframe has no
+ /// bitmap cursors there): those paint them into the window ([`paint`]).
+-pub const OS_CURSORS: bool = !cfg!(any(target_os = "macos", target_arch = "wasm32"));
++pub const OS_CURSORS: bool = !cfg!(any(target_os = "macos", all(target_arch = "wasm32", not(target_os = "kandelo"))));
+ 
+ /// Does this window show the glyphs as OS cursors, on a build that can ([`OS_CURSORS`])? Not on
+ /// Wayland, where the compositor decides how big a cursor bitmap shows: Hyprland shows each pixel
+diff -ruN a/crates/ui-egui/src/dialogs/missing_fonts.rs b/crates/ui-egui/src/dialogs/missing_fonts.rs
+--- a/crates/ui-egui/src/dialogs/missing_fonts.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/dialogs/missing_fonts.rs	2026-10-30 13:25:18
+@@ -45,7 +45,7 @@
+ /// dialog slot. On the web the status line shows how many fonts are missing instead, unless it
+ /// shows the open's notes.
+ pub fn after_open(app: &mut VectorcraftApp, r: &Value) {
+-    after_open_for(app, r, cfg!(target_arch = "wasm32"));
++    after_open_for(app, r, cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))));
+ }
+ 
+ fn after_open_for(app: &mut VectorcraftApp, r: &Value, web: bool) {
+diff -ruN a/crates/ui-egui/src/dialogs/missing_links.rs b/crates/ui-egui/src/dialogs/missing_links.rs
+--- a/crates/ui-egui/src/dialogs/missing_links.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/dialogs/missing_links.rs	2026-10-30 13:25:18
+@@ -47,7 +47,7 @@
+     super::missing_fonts::after_open(app, r);
+     let rows = |k: &str| r[k].as_array().cloned().unwrap_or_default();
+     let (missing, modified) = (rows("missingLinks"), ids(&rows("modifiedLinks")));
+-    if missing.is_empty() || cfg!(target_arch = "wasm32") {
++    if missing.is_empty() || cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         if !missing.is_empty() {
+             app.status(format!("{} linked file(s) can't be read here: their previews show", missing.len()));
+         }
+@@ -80,7 +80,7 @@
+ 
+ /// The same offer for linked files another app changed while the document is open
+ /// ([`vectorcraft_engine::link_watch`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) fn ask_update_changed(app: &mut VectorcraftApp, ids: Vec<Value>) {
+     ask(app, ids, tl!("{count} linked image(s) changed on disk. Show the new versions?"));
+ }
+diff -ruN a/crates/ui-egui/src/dialogs/save_for_web.rs b/crates/ui-egui/src/dialogs/save_for_web.rs
+--- a/crates/ui-egui/src/dialogs/save_for_web.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/dialogs/save_for_web.rs	2026-10-30 13:25:18
+@@ -199,19 +199,19 @@
+ }
+ 
+ /// The age at which a later browser preview removes an earlier preview's folder.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const PREVIEW_KEEP: std::time::Duration = std::time::Duration::from_secs(3600);
+ 
+ /// The folder a browser preview goes to: a new one for each preview, in the system's temporary
+ /// folder ([`preview_folder_in`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn temp_folder() -> Result<String, String> {
+     preview_folder_in(&std::env::temp_dir(), PREVIEW_KEEP)
+ }
+ 
+ /// The name of a folder that a preview made in the temporary folder, beside a `VectorCraft Save
+ /// for Web` it couldn't use, before the process id and the count.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const BESIDE: &str = "VectorCraft Save for Web ";
+ 
+ /// A new folder for a browser preview in the temporary folder `tmp`: inside `VectorCraft Save for
+@@ -219,7 +219,7 @@
+ /// [`BESIDE`] followed by the process id and a count. The log says why the shared folder wasn't
+ /// used. Each preview first removes the folders of that name in `tmp` last changed `keep` or longer
+ /// ago ([`remove_old`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn preview_folder_in(tmp: &std::path::Path, keep: std::time::Duration) -> Result<String, String> {
+     remove_old(tmp, BESIDE, keep);
+     preview_folder(&tmp.join("VectorCraft Save for Web"), keep).or_else(|e| {
+@@ -232,7 +232,7 @@
+ /// is refused when it is a link or not a folder, or, on unix, when it belongs to another user or
+ /// users other than its owner can write to it. Before the new folder is made, the preview folders
+ /// in `root` last changed `keep` or longer ago are removed ([`remove_old`]).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn preview_folder(root: &std::path::Path, keep: std::time::Duration) -> Result<String, String> {
+     match private_folder().recursive(true).create(root) {
+         Ok(()) => {}
+@@ -250,7 +250,7 @@
+ /// Removes the preview folders in `dir` last changed `keep` or longer ago: folders (not links)
+ /// named `prefix` followed by `<digits>-<digits>`, on unix only those the current user owns. Other
+ /// entries are left alone.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn remove_old(dir: &std::path::Path, prefix: &str, keep: std::time::Duration) {
+     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+         if !is_preview_name(&e.file_name(), prefix) {
+@@ -269,7 +269,7 @@
+ /// A new folder in `parent` named `prefix` followed by the process id, `-` and a count of the
+ /// process's previews; on unix only its owner can open it. A name that is already taken, by an
+ /// earlier process with the same id or by anyone else, is skipped for the next count.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn new_folder(parent: &std::path::Path, prefix: &str) -> Result<String, String> {
+     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+     loop {
+@@ -291,14 +291,14 @@
+ }
+ 
+ /// A builder for folders: a plain one outside unix.
+-#[cfg(all(not(unix), not(target_arch = "wasm32")))]
++#[cfg(all(not(unix), not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ fn private_folder() -> std::fs::DirBuilder {
+     std::fs::DirBuilder::new()
+ }
+ 
+ /// Why a preview root whose metadata (of the root itself, not what a link points to) is `m` can't
+ /// be used, or `None` when it can.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn refused(m: &std::fs::Metadata) -> Option<&'static str> {
+     if m.file_type().is_symlink() {
+         Some("it is a link")
+@@ -320,7 +320,7 @@
+ }
+ 
+ /// Whether the current user owns the file with metadata `m`: always true outside unix.
+-#[cfg(all(not(unix), not(target_arch = "wasm32")))]
++#[cfg(all(not(unix), not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ fn mine(_: &std::fs::Metadata) -> bool {
+     true
+ }
+@@ -333,19 +333,19 @@
+ 
+ /// Whether users other than the owner of the file with metadata `m` can write to it: always false
+ /// outside unix.
+-#[cfg(all(not(unix), not(target_arch = "wasm32")))]
++#[cfg(all(not(unix), not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ fn others_can_write(_: &std::fs::Metadata) -> bool {
+     false
+ }
+ 
+ /// Whether `name` is a preview folder's name: `prefix`, then digits, `-` and digits.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn is_preview_name(name: &std::ffi::OsStr, prefix: &str) -> bool {
+     let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+     name.to_str().and_then(|n| n.strip_prefix(prefix)).and_then(|n| n.split_once('-')).is_some_and(|(a, b)| digits(a) && digits(b))
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn temp_folder() -> Result<String, String> {
+     Err("no file system here".into())
+ }
+diff -ruN a/crates/ui-egui/src/font_menu.rs b/crates/ui-egui/src/font_menu.rs
+--- a/crates/ui-egui/src/font_menu.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/font_menu.rs	2026-10-30 13:25:18
+@@ -87,7 +87,7 @@
+ /// Samples rendered (or asked for) per frame, across every menu, so a long list doesn't stall the UI.
+ const SAMPLES_PER_FRAME: usize = 4;
+ /// Samples rendering at once (native).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_PENDING: usize = 8;
+ /// What a sample shows when the font lacks the selected text's characters (or there is none).
+ const FALLBACK_SAMPLE: &str = "Sample";
+@@ -639,7 +639,7 @@
+ #[derive(Default)]
+ struct Samples {
+     ready: HashMap<Key, Option<egui::TextureHandle>>,
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pending: HashMap<Key, std::sync::mpsc::Receiver<Option<egui::ColorImage>>>,
+     /// The pass the budget is for, and the samples started in it.
+     pass: u64,
+@@ -684,7 +684,7 @@
+         if s.ready.len() > MAX_SAMPLES {
+             s.ready.clear();
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             if let Some(rx) = s.pending.get(&key) {
+                 let img = match rx.try_recv() {
+@@ -716,7 +716,7 @@
+             None
+         }
+         // The web has no threads: a few samples per frame, on this one.
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         {
+             if !s.take_budget(ctx) {
+                 return None;
+diff -ruN a/crates/ui-egui/src/i18n.rs b/crates/ui-egui/src/i18n.rs
+--- a/crates/ui-egui/src/i18n.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/i18n.rs	2026-10-30 13:25:18
+@@ -432,7 +432,7 @@
+ 
+ /// True when `tag` names the generic `C` / `POSIX` locale (or a variant like `C.UTF-8`), which on
+ /// macOS means "no particular language" rather than English: the system language list decides.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn is_c_locale(tag: &str) -> bool {
+     let base = tag.split(['.', '@']).next().unwrap_or("").to_ascii_lowercase();
+     matches!(base.as_str(), "c" | "posix")
+@@ -442,7 +442,7 @@
+ /// locale probe (which runs `reg.exe` on Windows and `defaults` on macOS). Call it at startup; a
+ /// frame that needs the language before the probe finishes waits for it. A no-op on wasm.
+ pub fn detect_system_lang_in_background() {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         // A failed spawn leaves the probe to the first frame that needs it.
+         let _ = std::thread::Builder::new().name("locale-probe".into()).spawn(|| {
+@@ -473,7 +473,7 @@
+     let _ = SYSTEM.set(lang);
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn detect_system_lang() -> Lang {
+     // `VECTORCRAFT_LOCALE` overrides everything (also handy for screenshots); then the POSIX
+     // variables. `LANGUAGE` is a colon-separated priority list.
+@@ -534,7 +534,7 @@
+ }
+ 
+ /// The browser's languages arrive through [`set_system_locales`]; without them, English.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn detect_system_lang() -> Lang {
+     Lang::EN
+ }
+diff -ruN a/crates/ui-egui/src/keymap.rs b/crates/ui-egui/src/keymap.rs
+--- a/crates/ui-egui/src/keymap.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/keymap.rs	2026-10-30 13:25:18
+@@ -160,13 +160,13 @@
+ /// The platform shortcuts follow: the build's, and on the web the browser's operating system, so
+ /// Cmd shortcuts work in a browser on a Mac and Windows' reserved chords stay free on Windows.
+ pub fn platform() -> Platform {
+-    let web = if cfg!(target_arch = "wasm32") { WEB_PLATFORM.read().ok().and_then(|p| *p) } else { None };
++    let web = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { WEB_PLATFORM.read().ok().and_then(|p| *p) } else { None };
+     web.unwrap_or_else(Platform::current)
+ }
+ 
+ /// Records the operating system egui reports, which the web build reads from the browser.
+ pub fn note_os(ctx: &egui::Context) {
+-    if cfg!(target_arch = "wasm32") {
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+         let p = craft_keymap::egui::platform(ctx);
+         if let Ok(mut web) = WEB_PLATFORM.write()
+             && *web != Some(p)
+diff -ruN a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+--- a/crates/ui-egui/src/lib.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/lib.rs	2026-10-30 13:25:18
+@@ -202,7 +202,7 @@
+     /// the answer.
+     font_check: Option<(std::sync::mpsc::Receiver<bool>, bool)>,
+     /// When installed fonts were last checked in line (app time, s).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     font_install_check_at: f64,
+     /// Keyboard pastes of something other than text (see [`shortcuts::PasteChord`]).
+     pub(crate) paste_chord: shortcuts::PasteChord,
+diff -ruN a/crates/ui-egui/src/menus/state.rs b/crates/ui-egui/src/menus/state.rs
+--- a/crates/ui-egui/src/menus/state.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/menus/state.rs	2026-10-30 13:25:18
+@@ -218,7 +218,7 @@
+         "ui.cropImage" => selected_image(app, |_| true),
+         "effect.applyLast" | "effect.last" => app.last_effect.is_some() && app.session.active().is_some_and(|d| !d.selection.is_empty()),
+         "file.export.pdf" | "ui.savePdfDialog" | "ui.fileInfoDialog" | "ui.rasterEffectsSettingsDialog" => app.session.active().is_some(),
+-        "ui.missingFontsDialog" => !cfg!(target_arch = "wasm32") && app.session.active().is_some(),
++        "ui.missingFontsDialog" => !cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) && app.session.active().is_some(),
+         "ui.findFontsInFolder" => crate::picks::can(app, &crate::picks::PickRequest::Folder) && app.session.active().is_some(),
+         "ui.swatchOptions" | "ui.newSwatch" | "ui.newColorGroup" => app.session.active().is_some(),
+         "ui.graphicStyleOptions" | "ui.newCharStyle" | "ui.newParaStyle" => app.session.active().is_some(),
+diff -ruN a/crates/ui-egui/src/opening.rs b/crates/ui-egui/src/opening.rs
+--- a/crates/ui-egui/src/opening.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/opening.rs	2026-10-30 13:25:18
+@@ -42,7 +42,7 @@
+ /// Does opening happen off the UI thread here? Not on wasm (no threads), in unit tests (they look
+ /// at the document right after asking for it), or with `VECTORCRAFT_SYNC_OPEN` set.
+ pub fn available() -> bool {
+-    !(cfg!(target_arch = "wasm32") || cfg!(test) || std::env::var_os("VECTORCRAFT_SYNC_OPEN").is_some())
++    !(cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) || cfg!(test) || std::env::var_os("VECTORCRAFT_SYNC_OPEN").is_some())
+ }
+ 
+ /// Decode `bytes`, the file at `path`, read its linked files and lay out its type on a thread of its
+diff -ruN a/crates/ui-egui/src/panel_docking.rs b/crates/ui-egui/src/panel_docking.rs
+--- a/crates/ui-egui/src/panel_docking.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/panel_docking.rs	2026-10-30 13:25:18
+@@ -1075,7 +1075,7 @@
+         .blocked_rects(&blocked)
+         .input_blocked(modal)
+         .auto_collapse_iconic(app.session.prefs.auto_collapse_icon_panels);
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if let Some(hook) = app.services.native_input_hook.clone() {
+         dock = dock.native_input_hook(move |_, raw| hook(raw));
+     }
+@@ -1107,7 +1107,7 @@
+             app.ui.status = error;
+         }
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     for window in output.window_files {
+         // The keyboard's Shift as the main window last saw it: the window system sends a file
+         // drag no key events.
+@@ -1277,5 +1277,5 @@
+ #[cfg(test)]
+ mod tests;
+ 
+-#[cfg(all(test, not(target_arch = "wasm32")))]
++#[cfg(all(test, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ mod native_tests;
+diff -ruN a/crates/ui-egui/src/panels/character.rs b/crates/ui-egui/src/panels/character.rs
+--- a/crates/ui-egui/src/panels/character.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/panels/character.rs	2026-10-30 13:25:18
+@@ -1071,7 +1071,7 @@
+     menu_item(ui, tl!("Standard Vertical Roman Alignment"), false, false);
+     ui.separator();
+     // The installed fonts are always listed; this picks up fonts installed since the app started.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if menu_item(ui, tl!("Refresh Font List"), true, false)
+         && let Ok(r) = app.run("text.rescanFonts", json!({}))
+     {
+diff -ruN a/crates/ui-egui/src/panels/tests_asset_export.rs b/crates/ui-egui/src/panels/tests_asset_export.rs
+--- a/crates/ui-egui/src/panels/tests_asset_export.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/panels/tests_asset_export.rs	2026-10-30 13:25:18
+@@ -218,7 +218,7 @@
+     assert_eq!(log[0].0, "Untitled-1.zip");
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn export_writes_into_the_picked_folder() {
+     let dir = std::env::temp_dir().join(format!("vc-asset-panel-{}", std::process::id()));
+@@ -397,7 +397,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[test]
+ fn tiff_saved_aliases_use_document_defaults_and_explicit_rgb() {
+     let dir = std::env::temp_dir().join(format!("vc-asset-tiff-aliases-{}", std::process::id()));
+diff -ruN a/crates/ui-egui/src/place.rs b/crates/ui-egui/src/place.rs
+--- a/crates/ui-egui/src/place.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/place.rs	2026-10-30 13:25:18
+@@ -459,7 +459,7 @@
+ /// go by their kind, see [`VectorcraftApp::drop_target`]). On the web, egui's own position (for
+ /// the highlight: the web host follows its drags itself for drops).
+ pub fn drag_pos(ctx: &egui::Context) -> Option<egui::Pos2> {
+-    if cfg!(target_arch = "wasm32") { ctx.input(|i| i.pointer.latest_pos()) } else { None }
++    if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { ctx.input(|i| i.pointer.latest_pos()) } else { None }
+ }
+ 
+ /// A file dropped on the window: its name, path (when it has one) and bytes.
+diff -ruN a/crates/ui-egui/src/plugin_runs.rs b/crates/ui-egui/src/plugin_runs.rs
+--- a/crates/ui-egui/src/plugin_runs.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/plugin_runs.rs	2026-10-30 13:25:18
+@@ -57,7 +57,7 @@
+ 
+ /// Do heavy filters run off the UI thread here? Not on wasm (no threads).
+ pub fn available() -> bool {
+-    !cfg!(target_arch = "wasm32")
++    !cfg!(all(target_arch = "wasm32", not(target_os = "kandelo")))
+ }
+ 
+ /// Runs filter `p` (`plugin.run`'s params) on a thread of its own → `{background: true, status}`;
+diff -ruN a/crates/ui-egui/src/prefs_dialog.rs b/crates/ui-egui/src/prefs_dialog.rs
+--- a/crates/ui-egui/src/prefs_dialog.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/prefs_dialog.rs	2026-10-30 13:25:18
+@@ -277,7 +277,7 @@
+             }
+             // Windows and Linux only: macOS always has the system's title bar, the web has none.
+             PrefKind::Bool if sp.key == "systemTitleBar" => {
+-                if cfg!(all(not(target_arch = "wasm32"), not(target_os = "macos"))) {
++                if cfg!(all(not(all(target_arch = "wasm32", not(target_os = "kandelo"))), not(target_os = "macos"))) {
+                     bool_row(ui, d, sp.key, sp.label);
+                     // The window's decorations are chosen once, when the app starts.
+                     ui.label(egui::RichText::new(tl!("Applies the next time VectorCraft starts.")).color(t.text_dim).size(11.0));
+diff -ruN a/crates/ui-egui/src/render_worker.rs b/crates/ui-egui/src/render_worker.rs
+--- a/crates/ui-egui/src/render_worker.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/render_worker.rs	2026-10-30 13:25:18
+@@ -41,7 +41,7 @@
+ impl Worker {
+     /// Spawn the worker thread (None on wasm, where rendering stays synchronous).
+     pub fn spawn(ctx: egui::Context) -> Option<Self> {
+-        if cfg!(target_arch = "wasm32") {
++        if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) {
+             return None;
+         }
+         let (tx, jobs) = channel::<Job>();
+diff -ruN a/crates/ui-egui/src/state.rs b/crates/ui-egui/src/state.rs
+--- a/crates/ui-egui/src/state.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/state.rs	2026-10-30 13:25:18
+@@ -1011,7 +1011,7 @@
+ pub(crate) const SYSTEM_CLIPBOARD_POLL: f64 = 0.25;
+ 
+ /// Seconds between looks for fonts a font manager activated while the app stays in front (#2576).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(crate) const FONT_INSTALL_POLL: f64 = 2.0;
+ 
+ #[cfg(test)]
+diff -ruN a/crates/ui-egui/src/stylus.rs b/crates/ui-egui/src/stylus.rs
+--- a/crates/ui-egui/src/stylus.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/stylus.rs	2026-10-30 13:25:18
+@@ -189,7 +189,7 @@
+         pen.latest.map(|_| pen.eraser)
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     fn wait_for_touch<'a>(&'a self, pen: MutexGuard<'a, Pen>, wait: Duration) -> MutexGuard<'a, Pen> {
+         match self.0.set.wait_timeout_while(pen, wait, |p| p.hovering()) {
+             Ok((pen, _)) => pen,
+@@ -198,7 +198,7 @@
+     }
+ 
+     /// The browser's main thread can't wait, and the web build writes its feed on that thread.
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     fn wait_for_touch<'a>(&'a self, pen: MutexGuard<'a, Pen>, _wait: Duration) -> MutexGuard<'a, Pen> {
+         pen
+     }
+diff -ruN a/crates/ui-egui/src/thumb_worker.rs b/crates/ui-egui/src/thumb_worker.rs
+--- a/crates/ui-egui/src/thumb_worker.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/thumb_worker.rs	2026-10-30 13:25:18
+@@ -45,7 +45,7 @@
+     /// tests (they look at the panel right after the frame that asks), with
+     /// `VECTORCRAFT_SYNC_RENDER` set, or if the thread can't start.
+     pub fn spawn(ctx: &egui::Context, name: &str) -> Option<Self> {
+-        if cfg!(target_arch = "wasm32") || cfg!(test) || std::env::var_os("VECTORCRAFT_SYNC_RENDER").is_some() {
++        if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) || cfg!(test) || std::env::var_os("VECTORCRAFT_SYNC_RENDER").is_some() {
+             return None;
+         }
+         Self::start(ctx, name)
+diff -ruN a/crates/ui-egui/src/ui_fonts.rs b/crates/ui-egui/src/ui_fonts.rs
+--- a/crates/ui-egui/src/ui_fonts.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/ui_fonts.rs	2026-10-30 13:25:18
+@@ -24,7 +24,7 @@
+     /// The fonts added to egui, by name.
+     added: HashSet<String>,
+     /// The faces covering the characters being looked for (native: looked for on a thread).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pending: Option<std::sync::mpsc::Receiver<Vec<Arc<FontFace>>>>,
+ }
+ 
+@@ -32,7 +32,7 @@
+     /// After a frame is laid out: add the fallback fonts found since the last frame, and look for
+     /// fonts covering the characters this frame painted that the UI fonts lack.
+     pub(crate) fn frame(&mut self, ctx: &egui::Context) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if let Some(faces) = self.pending.as_ref().and_then(|rx| rx.try_recv().ok()) {
+             self.pending = None;
+             self.install(ctx, &faces);
+@@ -54,7 +54,7 @@
+         };
+         // Native: the installed fonts are read off the UI thread. Characters met meanwhile wait for
+         // the next search (they aren't marked seen until then).
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             let (tx, rx) = std::sync::mpsc::channel();
+             let repaint = ctx.clone();
+@@ -68,14 +68,14 @@
+             }
+         }
+         // The web has only the loaded fonts to look through: quick, on this thread.
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         self.install(ctx, &find());
+     }
+ 
+     /// Characters painted this frame that the UI fonts lack and haven't been looked for, now
+     /// marked seen. None while a search is running.
+     fn missing(&mut self, ctx: &egui::Context) -> Vec<char> {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if self.pending.is_some() {
+             return vec![];
+         }
+diff -ruN a/crates/ui-egui/src/updates_ui.rs b/crates/ui-egui/src/updates_ui.rs
+--- a/crates/ui-egui/src/updates_ui.rs	2026-10-29 21:03:56
++++ b/crates/ui-egui/src/updates_ui.rs	2026-10-30 13:25:18
+@@ -4,19 +4,19 @@
+ 
+ use crate::VectorcraftApp;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use craft_update::updater::{Action, Status, Updater};
+ 
+ pub(crate) struct Runtime {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     updater: Updater,
+     /// The desktop app turns the check at start on; tests and the web build leave it off.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     startup_check: bool,
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     check_requested: bool,
+     /// The context of the last frame, to wake the UI when a check is queued from a menu callback.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     repaint: Option<egui::Context>,
+     pub(crate) manual_window_open: bool,
+     pub(crate) status_message: Option<String>,
+@@ -25,13 +25,13 @@
+ impl Default for Runtime {
+     fn default() -> Self {
+         Self {
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             updater: Updater::new(&craft_update::suite::VECTORCRAFT, env!("CARGO_PKG_VERSION")),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             startup_check: false,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             check_requested: false,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             repaint: None,
+             manual_window_open: false,
+             status_message: None,
+@@ -41,14 +41,14 @@
+ 
+ impl VectorcraftApp {
+     /// Whether the app asks for a newer release when it starts (off until the desktop app turns it on).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     pub fn set_startup_update_check(&mut self, on: bool) {
+         self.updates_rt.startup_check = on;
+     }
+ }
+ 
+ pub(crate) fn check(app: &mut VectorcraftApp) -> Result<Value, String> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         app.updates_rt.check_requested = true;
+         if let Some(ctx) = &app.updates_rt.repaint {
+@@ -56,7 +56,7 @@
+         }
+         Ok(Value::Null)
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         app.updates_rt.manual_window_open = true;
+         app.updates_rt.status_message = Some("Update check is not supported in the web browser.".into());
+@@ -65,7 +65,7 @@
+ }
+ 
+ pub(crate) fn tick(app: &mut VectorcraftApp, ctx: &egui::Context) {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let rt = &mut app.updates_rt;
+         rt.repaint = Some(ctx.clone());
+@@ -76,12 +76,12 @@
+         }
+         rt.updater.tick(ctx);
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     let _ = (app, ctx);
+ }
+ 
+ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         // The restart helper is scheduled before the app closes, so no update starts over unsaved work.
+         let clean = !crate::unsaved::any_dirty(app);
+@@ -125,7 +125,7 @@
+     }
+ 
+     // Closing the window dismisses the outcome it showed.
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     if !app.updates_rt.manual_window_open {
+         app.updates_rt.updater.dismiss_status();
+     }

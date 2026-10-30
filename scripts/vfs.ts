@@ -11,15 +11,17 @@ const binaries = path.resolve( root, 'binaries' );
 
 const configs = path.resolve( root, 'config' );
 
-const output = path.resolve( root, 'public/photocraft.vfs' );
-
 const SIZE = 128 * 1024 * 1024;
 
 const DIRECTORIES = [ '/etc', '/etc/kandelo', '/usr', '/usr/bin', '/usr/libexec', '/usr/libexec/kandelo', '/usr/local', '/usr/local/bin', '/usr/share', '/usr/share/X11', '/usr/share/X11/xkb', '/usr/share/kandelo', '/usr/share/kandelo/exchange-handlers.d' ];
 
-const CONFIGS = { '/etc/passwd' : 'passwd', '/etc/kandelo/demo.json' : 'demo.json', '/etc/kandelo/experimental-terminal-session.json' : 'session.json', '/etc/kandelo/exchange.conf' : 'exchange.conf' };
+const APPS = [ 'photocraft', 'vectorcraft', 'wordcraft', 'gridcraft' ];
 
-const PROGRAMS = { '/usr/local/bin/wlcompositor' : 'wlcompositor', '/usr/local/bin/photocraft' : 'photocraft', '/usr/local/bin/dash' : 'dash', '/usr/bin/zenity' : 'zenity', '/usr/bin/xdg-open' : 'xdg-open', '/usr/libexec/kandelo/exchange-agent' : 'kxchgd', '/usr/libexec/kandelo/exchange-save' : 'exchange-save' };
+const CONFIGS = { '/etc/passwd' : 'passwd', '/etc/kandelo/experimental-terminal-session.json' : 'session.json', '/etc/kandelo/exchange.conf' : 'exchange.conf' };
+
+const PROGRAMS = { '/usr/local/bin/wlcompositor' : 'wlcompositor', '/usr/local/bin/dash' : 'dash', '/usr/bin/zenity' : 'zenity', '/usr/bin/xdg-open' : 'xdg-open', '/usr/libexec/kandelo/exchange-agent' : 'kxchgd', '/usr/libexec/kandelo/exchange-save' : 'exchange-save' };
+
+const LINKS : Record<string, Record<string, string>> = { vectorcraft : { '/usr/bin/x-www-browser' : 'xdg-open' }, wordcraft : { '/usr/bin/x-www-browser' : 'xdg-open' } };
 
 const HANDLER = '/usr/share/kandelo/exchange-handlers.d/99-save.handler';
 
@@ -39,6 +41,12 @@ const kandelo = () =>
 
 const main = async () =>
 {
+	const app = process.argv[ 2 ];
+
+	if( !APPS.includes( app ) ) throw new Error( `usage: npm run vfs -- <${APPS.join( '|' )}>` );
+
+	const output = path.resolve( root, 'public', app, `${app}.vfs` );
+
 	const checkout = kandelo();
 
 	const { tsImport } = await import( pathToFileURL( path.join( checkout, 'node_modules/tsx/dist/esm/api/index.mjs' ) ).href );
@@ -72,9 +80,15 @@ const main = async () =>
 
 	for( const [ vfsPath, name ] of Object.entries( CONFIGS ) ) write( vfsPath, fs.readFileSync( path.join( configs, name ) ), 0o644 );
 
+	write( '/etc/kandelo/demo.json', fs.readFileSync( path.join( configs, app, 'demo.json' ) ), 0o644 );
+
 	write( HANDLER, fs.readFileSync( path.join( checkout, 'images/rootfs', HANDLER ) ), 0o644 );
 
-	for( const [ vfsPath, name ] of Object.entries( PROGRAMS ) ) write( vfsPath, fs.readFileSync( path.join( binaries, `${name}.wasm` ) ), 0o755 );
+	for( const [ vfsPath, name ] of Object.entries( PROGRAMS ) ) write( vfsPath, fs.readFileSync( path.join( binaries, app, `${name}.wasm` ) ), 0o755 );
+
+	write( `/usr/local/bin/${app}`, fs.readFileSync( path.join( binaries, app, `${app}.wasm` ) ), 0o755 );
+
+	for( const [ vfsPath, target ] of Object.entries( LINKS[ app ] ?? {} ) ) image.symlink( target, vfsPath );
 
 	const bytes = await image.saveImage( {
 		metadata : { version : 1, kernelAbi : abiVersion, createdBy : 'scripts/vfs.ts' }

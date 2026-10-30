@@ -1,27 +1,32 @@
-# tokio 1.53.1: target_family = "wasm" means a browser or WASI here;
+# tokio 1.54.1: target_family = "wasm" means a browser or WASI here;
 # Kandelo is a unix target with threads, signals and mio, so it takes the
 # unix paths. Peer credentials use Linux's SO_PEERCRED (ucred).
---- a/Cargo.toml
-+++ b/Cargo.toml
-@@ -875,7 +875,7 @@
- version = "0.7"
- features = ["rt"]
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2006-07-24 03:21:28
++++ b/Cargo.toml	2026-10-29 17:37:36
+@@ -931,7 +931,7 @@
+ [dev-dependencies.tokio-test]
+ version = "0.4.0"
  
--[target.'cfg(all(target_family = "wasm", not(target_os = "wasi")))'.dev-dependencies.wasm-bindgen-test]
-+[target.'cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))'.dev-dependencies.wasm-bindgen-test]
+-[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
++[target.'cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
  version = "0.3.0"
  
  [target.'cfg(all(tokio_unstable, target_has_atomic = "64"))'.dev-dependencies.tracing-mock]
-@@ -910,7 +910,7 @@
- [target.'cfg(all(tokio_unstable, target_os = "linux"))'.dev-dependencies.backtrace]
- version = "0.3.58"
+@@ -975,10 +975,10 @@
+ ]
+ default-features = false
  
--[target.'cfg(any(not(target_family = "wasm"), all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
-+[target.'cfg(any(not(all(target_family = "wasm", not(target_os = "kandelo"))), all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
+-[target.'cfg(any(not(target_family = "wasm"), target_os = "emscripten"))'.dev-dependencies.tempfile]
++[target.'cfg(any(not(all(target_family = "wasm", not(target_os = "kandelo"))), target_os = "emscripten"))'.dev-dependencies.tempfile]
+ version = "3.1.0"
+ 
+-[target.'cfg(any(not(target_family = "wasm"), target_os = "emscripten", all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
++[target.'cfg(any(not(all(target_family = "wasm", not(target_os = "kandelo"))), target_os = "emscripten", all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
  version = "0.6.3"
  features = ["all"]
  optional = true
-@@ -922,16 +922,16 @@
+@@ -990,13 +990,13 @@
      "checkpoint",
  ]
  
@@ -37,13 +42,10 @@
 +[target.'cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))'.dev-dependencies.socket2]
  version = "0.6.0"
  
--[target.'cfg(not(target_family = "wasm"))'.dev-dependencies.tempfile]
-+[target.'cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))'.dev-dependencies.tempfile]
- version = "3.1.0"
- 
  [target.'cfg(target_os = "freebsd")'.dev-dependencies.mio-aio]
---- a/src/io/mod.rs
-+++ b/src/io/mod.rs
+diff -ruN a/src/io/mod.rs b/src/io/mod.rs
+--- a/src/io/mod.rs	2006-07-24 03:21:28
++++ b/src/io/mod.rs	2026-10-29 17:37:36
 @@ -36,7 +36,7 @@
  //! can do the same with [`tokio::fs::File`][`File`]:
  //!
@@ -71,8 +73,9 @@
  //! # {
  //! use tokio::io::{self, BufWriter, AsyncWriteExt};
  //! use tokio::fs::File;
---- a/src/io/util/async_read_ext.rs
-+++ b/src/io/util/async_read_ext.rs
+diff -ruN a/src/io/util/async_read_ext.rs b/src/io/util/async_read_ext.rs
+--- a/src/io/util/async_read_ext.rs	2006-07-24 03:21:28
++++ b/src/io/util/async_read_ext.rs	2026-10-29 17:37:36
 @@ -41,7 +41,7 @@
      /// [`AsyncRead`].
      ///
@@ -109,7 +112,7 @@
          /// # {
          /// use tokio::fs::File;
          /// use tokio::io::{self, AsyncReadExt};
-@@ -301,7 +301,7 @@
+@@ -302,7 +302,7 @@
          /// [`File`][crate::fs::File]s implement `Read`:
          ///
          /// ```no_run
@@ -118,7 +121,7 @@
          /// # {
          /// use tokio::fs::File;
          /// use tokio::io::{self, AsyncReadExt};
-@@ -1330,7 +1330,7 @@
+@@ -1332,7 +1332,7 @@
          /// [`File`][crate::fs::File]s implement `Read`:
          ///
          /// ```no_run
@@ -127,7 +130,7 @@
          /// # {
          /// use tokio::io::{self, AsyncReadExt};
          /// use tokio::fs::File;
-@@ -1381,7 +1381,7 @@
+@@ -1383,7 +1383,7 @@
          /// [`File`][crate::fs::File]s implement `Read`:
          ///
          /// ```no_run
@@ -136,7 +139,7 @@
          /// # {
          /// use tokio::io::{self, AsyncReadExt};
          /// use tokio::fs::File;
-@@ -1424,7 +1424,7 @@
+@@ -1426,7 +1426,7 @@
          /// [`File`][crate::fs::File]s implement `Read`:
          ///
          /// ```no_run
@@ -145,8 +148,9 @@
          /// # {
          /// use tokio::io::{self, AsyncReadExt};
          /// use tokio::fs::File;
---- a/src/io/util/async_seek_ext.rs
-+++ b/src/io/util/async_seek_ext.rs
+diff -ruN a/src/io/util/async_seek_ext.rs b/src/io/util/async_seek_ext.rs
+--- a/src/io/util/async_seek_ext.rs	2006-07-24 03:21:28
++++ b/src/io/util/async_seek_ext.rs	2026-10-29 17:37:36
 @@ -46,7 +46,7 @@
          /// # Examples
          ///
@@ -156,8 +160,9 @@
          /// # {
          /// use tokio::fs::File;
          /// use tokio::io::{AsyncSeekExt, AsyncReadExt};
---- a/src/io/util/async_write_ext.rs
-+++ b/src/io/util/async_write_ext.rs
+diff -ruN a/src/io/util/async_write_ext.rs b/src/io/util/async_write_ext.rs
+--- a/src/io/util/async_write_ext.rs	2006-07-24 03:21:28
++++ b/src/io/util/async_write_ext.rs	2026-10-29 17:37:36
 @@ -44,7 +44,7 @@
      /// [`AsyncWrite`].
      ///
@@ -194,7 +199,7 @@
          /// # {
          /// use tokio::io::{self, AsyncWriteExt};
          /// use tokio::fs::File;
-@@ -311,7 +311,7 @@
+@@ -312,7 +312,7 @@
          /// [advanced]: bytes::Buf::advance
          ///
          /// ```no_run
@@ -203,7 +208,7 @@
          /// # {
          /// use tokio::io::{self, AsyncWriteExt};
          /// use tokio::fs::File;
-@@ -367,7 +367,7 @@
+@@ -371,7 +371,7 @@
          /// # Examples
          ///
          /// ```no_run
@@ -212,7 +217,7 @@
          /// # {
          /// use tokio::io::{self, AsyncWriteExt};
          /// use tokio::fs::File;
-@@ -1262,7 +1262,7 @@
+@@ -1267,7 +1267,7 @@
          /// # Examples
          ///
          /// ```no_run
@@ -221,7 +226,7 @@
          /// # {
          /// use tokio::io::{self, BufWriter, AsyncWriteExt};
          /// use tokio::fs::File;
-@@ -1304,7 +1304,7 @@
+@@ -1309,7 +1309,7 @@
          /// # Examples
          ///
          /// ```no_run
@@ -230,8 +235,9 @@
          /// # {
          /// use tokio::io::{self, BufWriter, AsyncWriteExt};
          /// use tokio::fs::File;
---- a/src/lib.rs
-+++ b/src/lib.rs
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2006-07-24 03:21:28
++++ b/src/lib.rs	2026-10-29 17:37:36
 @@ -197,7 +197,7 @@
  //! [`thread_keep_alive`]: crate::runtime::Builder::thread_keep_alive()
  //!
@@ -250,17 +256,18 @@
  //! # {
  //! use tokio::net::TcpListener;
  //! use tokio::io::{AsyncReadExt, AsyncWriteExt};
-@@ -466,7 +466,7 @@
+@@ -502,7 +502,7 @@
  
  #[cfg(all(
      not(tokio_unstable),
 -    target_family = "wasm",
 +    all(target_family = "wasm", not(target_os = "kandelo")),
+     not(target_os = "emscripten"),
      any(
          feature = "fs",
-         feature = "io-std",
---- a/src/loom/std/barrier.rs
-+++ b/src/loom/std/barrier.rs
+diff -ruN a/src/loom/std/barrier.rs b/src/loom/std/barrier.rs
+--- a/src/loom/std/barrier.rs	2006-07-24 03:21:28
++++ b/src/loom/std/barrier.rs	2026-10-29 17:37:36
 @@ -12,7 +12,7 @@
  /// # Examples
  ///
@@ -279,19 +286,9 @@
      /// # {
      /// use std::sync::{Arc, Barrier};
      /// use std::thread;
---- a/src/macros/cfg.rs
-+++ b/src/macros/cfg.rs
-@@ -715,7 +715,7 @@
- macro_rules! cfg_is_wasm_not_wasi {
-     ($($item:item)*) => {
-         $(
--            #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
-+            #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
-             $item
-         )*
-     }
---- a/src/macros/join.rs
-+++ b/src/macros/join.rs
+diff -ruN a/src/macros/join.rs b/src/macros/join.rs
+--- a/src/macros/join.rs	2006-07-24 03:21:28
++++ b/src/macros/join.rs	2026-10-29 17:37:36
 @@ -77,7 +77,7 @@
          /// Using the `biased;` mode to control polling order.
          ///
@@ -301,8 +298,9 @@
          /// # {
          /// async fn do_stuff_async() {
          ///     // async work
---- a/src/net/unix/ucred.rs
-+++ b/src/net/unix/ucred.rs
+diff -ruN a/src/net/unix/ucred.rs b/src/net/unix/ucred.rs
+--- a/src/net/unix/ucred.rs	2006-07-24 03:21:28
++++ b/src/net/unix/ucred.rs	2026-10-29 17:37:36
 @@ -34,6 +34,7 @@
  }
  
@@ -311,7 +309,7 @@
      target_os = "linux",
      target_os = "redox",
      target_os = "android",
-@@ -79,6 +80,7 @@
+@@ -80,6 +81,7 @@
  pub(crate) use self::impl_nto::get_peer_cred;
  
  #[cfg(any(
@@ -319,7 +317,7 @@
      target_os = "linux",
      target_os = "redox",
      target_os = "android",
-@@ -95,6 +97,7 @@
+@@ -96,6 +98,7 @@
      #[cfg(target_os = "openbsd")]
      use libc::sockpeercred as ucred;
      #[cfg(any(
@@ -327,8 +325,9 @@
          target_os = "linux",
          target_os = "redox",
          target_os = "android",
---- a/src/runtime/builder.rs
-+++ b/src/runtime/builder.rs
+diff -ruN a/src/runtime/builder.rs b/src/runtime/builder.rs
+--- a/src/runtime/builder.rs	2006-07-24 03:21:28
++++ b/src/runtime/builder.rs	2026-10-29 17:37:36
 @@ -35,7 +35,7 @@
  /// # Examples
  ///
@@ -338,7 +337,7 @@
  /// # {
  /// use tokio::runtime::Builder;
  ///
-@@ -174,7 +174,7 @@
+@@ -181,7 +181,7 @@
          /// # Examples
          ///
          /// ```
@@ -347,7 +346,7 @@
          /// # {
          /// use tokio::runtime::{self, UnhandledPanic};
          ///
-@@ -363,7 +363,7 @@
+@@ -385,7 +385,7 @@
      /// # Examples
      ///
      /// ```
@@ -356,7 +355,7 @@
      /// # {
      /// use tokio::runtime;
      ///
-@@ -410,7 +410,7 @@
+@@ -432,7 +432,7 @@
      /// # Examples
      ///
      /// ```
@@ -365,7 +364,16 @@
      /// # {
      /// use tokio::runtime;
      ///
-@@ -483,7 +483,7 @@
+@@ -509,7 +509,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use tokio::runtime;
+     ///
+@@ -550,7 +550,7 @@
      /// ## Multi threaded runtime with 4 threads
      ///
      /// ```
@@ -374,7 +382,7 @@
      /// # {
      /// use tokio::runtime;
      ///
-@@ -580,7 +580,7 @@
+@@ -647,7 +647,7 @@
      /// # Examples
      ///
      /// ```
@@ -383,7 +391,7 @@
      /// # {
      /// # use tokio::runtime;
      ///
-@@ -602,7 +602,7 @@
+@@ -669,7 +669,7 @@
      /// # Examples
      ///
      /// ```
@@ -392,7 +400,7 @@
      /// # {
      /// # use tokio::runtime;
      ///
-@@ -632,7 +632,7 @@
+@@ -699,7 +699,7 @@
      /// # Examples
      ///
      /// ```
@@ -401,7 +409,7 @@
      /// # {
      /// # use tokio::runtime;
      /// # use std::sync::atomic::{AtomicUsize, Ordering};
-@@ -666,7 +666,7 @@
+@@ -733,7 +733,7 @@
      /// # Examples
      ///
      /// ```
@@ -410,7 +418,7 @@
      /// # {
      /// # use tokio::runtime;
      ///
-@@ -690,7 +690,7 @@
+@@ -757,7 +757,7 @@
      /// # Examples
      ///
      /// ```
@@ -419,16 +427,16 @@
      /// # {
      /// # use tokio::runtime;
      /// # pub fn main() {
-@@ -718,7 +718,7 @@
+@@ -785,7 +785,7 @@
      /// # Examples
      ///
      /// ```
 -    /// # #[cfg(not(target_family = "wasm"))]
 +    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
-     /// {
+     /// # {
      /// # use tokio::runtime;
      /// # pub fn main() {
-@@ -753,7 +753,7 @@
+@@ -820,7 +820,7 @@
      ///
      /// ## Multithreaded executor
      /// ```
@@ -437,7 +445,7 @@
      /// # {
      /// # use std::sync::Arc;
      /// # use std::sync::atomic::{AtomicBool, Ordering};
-@@ -832,7 +832,7 @@
+@@ -899,7 +899,7 @@
      /// # Examples
      ///
      /// ```
@@ -446,7 +454,7 @@
      /// # {
      /// # use tokio::runtime;
      /// # pub fn main() {
-@@ -923,7 +923,7 @@
+@@ -993,7 +993,7 @@
      /// # Examples
      ///
      /// ```
@@ -455,7 +463,7 @@
      /// # {
      /// # use std::sync::{atomic::AtomicUsize, Arc};
      /// # use tokio::task::yield_now;
-@@ -970,7 +970,7 @@
+@@ -1043,7 +1043,7 @@
      /// # Examples
      ///
      /// ```
@@ -464,7 +472,7 @@
      /// # {
      /// # use std::sync::{atomic::AtomicUsize, Arc};
      /// # use tokio::task::yield_now;
-@@ -1058,7 +1058,7 @@
+@@ -1131,7 +1131,7 @@
      /// # Examples
      ///
      /// ```
@@ -473,7 +481,7 @@
      /// # {
      /// use tokio::runtime::Builder;
      ///
-@@ -1132,7 +1132,7 @@
+@@ -1215,7 +1215,7 @@
      /// # Example
      ///
      /// ```
@@ -482,7 +490,7 @@
      /// # {
      /// # use tokio::runtime;
      /// # use std::time::Duration;
-@@ -1174,7 +1174,7 @@
+@@ -1257,7 +1257,7 @@
      /// # Examples
      ///
      /// ```
@@ -491,7 +499,7 @@
      /// # {
      /// # use tokio::runtime;
      /// # pub fn main() {
-@@ -1215,7 +1215,7 @@
+@@ -1298,7 +1298,7 @@
      /// # Examples
      ///
      /// ```
@@ -500,7 +508,7 @@
      /// # {
      /// # use tokio::runtime;
      /// # pub fn main() {
-@@ -1330,7 +1330,7 @@
+@@ -1413,7 +1413,7 @@
          /// # Examples
          ///
          /// ```
@@ -509,7 +517,7 @@
          /// # {
          /// use tokio::runtime;
          ///
-@@ -1403,7 +1403,7 @@
+@@ -1486,7 +1486,7 @@
          /// # Examples
          ///
          /// ```
@@ -518,7 +526,7 @@
          /// # {
          /// use tokio::runtime;
          ///
-@@ -1452,7 +1452,7 @@
+@@ -1535,7 +1535,7 @@
          /// # Examples
          ///
          /// ```
@@ -527,7 +535,7 @@
          /// # {
          /// use tokio::runtime::{self, HistogramScale};
          ///
-@@ -1479,7 +1479,7 @@
+@@ -1562,7 +1562,7 @@
          /// # Examples
          /// Configure a [`LogHistogram`] with [default configuration]:
          /// ```
@@ -536,7 +544,7 @@
          /// # {
          /// use tokio::runtime;
          /// use tokio::runtime::{HistogramConfiguration, LogHistogram};
-@@ -1496,7 +1496,7 @@
+@@ -1579,7 +1579,7 @@
          ///
          /// Configure a linear histogram with 100 buckets, each 10μs wide
          /// ```
@@ -545,7 +553,7 @@
          /// # {
          /// use tokio::runtime;
          /// use std::time::Duration;
-@@ -1517,7 +1517,7 @@
+@@ -1600,7 +1600,7 @@
          /// - Max error of 0.1
          /// - No more than 1024 buckets
          /// ```
@@ -554,7 +562,7 @@
          /// # {
          /// use std::time::Duration;
          /// use tokio::runtime;
-@@ -1586,7 +1586,7 @@
+@@ -1669,7 +1669,7 @@
          /// # Examples
          ///
          /// ```
@@ -563,7 +571,7 @@
          /// # {
          /// use tokio::runtime;
          /// use std::time::Duration;
-@@ -1624,7 +1624,7 @@
+@@ -1707,7 +1707,7 @@
          /// # Examples
          ///
          /// ```
@@ -572,7 +580,7 @@
          /// # {
          /// use tokio::runtime;
          ///
-@@ -1802,7 +1802,7 @@
+@@ -1938,7 +1938,7 @@
          /// # Examples
          ///
          /// ```
@@ -581,7 +589,7 @@
          /// # {
          /// use tokio::runtime;
          ///
-@@ -1890,7 +1890,7 @@
+@@ -2070,7 +2070,7 @@
          /// # Examples
          ///
          /// ```
@@ -590,7 +598,7 @@
          /// # {
          /// use tokio::runtime;
          ///
-@@ -1929,7 +1929,7 @@
+@@ -2110,7 +2110,7 @@
          /// # Examples
          /// Configure a [`LogHistogram`] with [default configuration]:
          /// ```
@@ -599,7 +607,7 @@
          /// # {
          /// use tokio::runtime;
          /// use tokio::runtime::{HistogramConfiguration, LogHistogram};
-@@ -1946,7 +1946,7 @@
+@@ -2127,7 +2127,7 @@
          ///
          /// Configure a linear histogram with 100 buckets, each 10μs wide
          /// ```
@@ -608,7 +616,7 @@
          /// # {
          /// use tokio::runtime;
          /// use std::time::Duration;
-@@ -1967,7 +1967,7 @@
+@@ -2148,7 +2148,7 @@
          /// - Max error of 0.1
          /// - No more than 1024 buckets
          /// ```
@@ -617,8 +625,9 @@
          /// # {
          /// use std::time::Duration;
          /// use tokio::runtime;
---- a/src/runtime/config.rs
-+++ b/src/runtime/config.rs
+diff -ruN a/src/runtime/config.rs b/src/runtime/config.rs
+--- a/src/runtime/config.rs	2006-07-24 03:21:28
++++ b/src/runtime/config.rs	2026-10-29 17:37:36
 @@ -1,5 +1,5 @@
  #![cfg_attr(
 -    any(not(all(tokio_unstable, feature = "full")), target_family = "wasm"),
@@ -626,8 +635,9 @@
      allow(dead_code)
  )]
  use crate::runtime::{Callback, TaskCallback};
---- a/src/runtime/driver.rs
-+++ b/src/runtime/driver.rs
+diff -ruN a/src/runtime/driver.rs b/src/runtime/driver.rs
+--- a/src/runtime/driver.rs	2006-07-24 03:21:28
++++ b/src/runtime/driver.rs	2026-10-29 17:37:36
 @@ -3,7 +3,7 @@
  // Eventually, this file will see significant refactoring / cleanup. For now, we
  // don't need to worry much about dead code with certain feature permutations.
@@ -637,8 +647,9 @@
      allow(dead_code)
  )]
  
---- a/src/runtime/handle.rs
-+++ b/src/runtime/handle.rs
+diff -ruN a/src/runtime/handle.rs b/src/runtime/handle.rs
+--- a/src/runtime/handle.rs	2006-07-24 03:21:28
++++ b/src/runtime/handle.rs	2026-10-29 17:37:36
 @@ -51,7 +51,7 @@
      /// # Examples
      ///
@@ -711,8 +722,9 @@
      /// # {
      /// use tokio::runtime::{Handle, RuntimeFlavor};
      ///
---- a/src/runtime/id.rs
-+++ b/src/runtime/id.rs
+diff -ruN a/src/runtime/id.rs b/src/runtime/id.rs
+--- a/src/runtime/id.rs	2006-07-24 03:21:28
++++ b/src/runtime/id.rs	2026-10-29 17:37:36
 @@ -16,7 +16,7 @@
  /// # Examples
  ///
@@ -722,9 +734,10 @@
  /// # {
  /// use tokio::runtime::Handle;
  ///
---- a/src/runtime/local_runtime/runtime.rs
-+++ b/src/runtime/local_runtime/runtime.rs
-@@ -317,7 +317,7 @@
+diff -ruN a/src/runtime/local_runtime/runtime.rs b/src/runtime/local_runtime/runtime.rs
+--- a/src/runtime/local_runtime/runtime.rs	2006-07-24 03:21:28
++++ b/src/runtime/local_runtime/runtime.rs	2026-10-29 17:37:36
+@@ -322,7 +322,7 @@
      /// # Examples
      ///
      /// ```
@@ -733,8 +746,9 @@
      /// # {
      /// use tokio::runtime::LocalRuntime;
      /// use tokio::task;
---- a/src/runtime/metrics/histogram/h2_histogram.rs
-+++ b/src/runtime/metrics/histogram/h2_histogram.rs
+diff -ruN a/src/runtime/metrics/histogram/h2_histogram.rs b/src/runtime/metrics/histogram/h2_histogram.rs
+--- a/src/runtime/metrics/histogram/h2_histogram.rs	2006-07-24 03:21:28
++++ b/src/runtime/metrics/histogram/h2_histogram.rs	2026-10-29 17:37:36
 @@ -302,7 +302,7 @@
      use crate::runtime::metrics::histogram::h2_histogram::LogHistogram;
      use crate::runtime::metrics::histogram::HistogramType;
@@ -744,8 +758,9 @@
      mod proptests {
          use super::*;
          use crate::runtime::metrics::batch::duration_as_u64;
---- a/src/runtime/metrics/runtime.rs
-+++ b/src/runtime/metrics/runtime.rs
+diff -ruN a/src/runtime/metrics/runtime.rs b/src/runtime/metrics/runtime.rs
+--- a/src/runtime/metrics/runtime.rs	2006-07-24 03:21:28
++++ b/src/runtime/metrics/runtime.rs	2026-10-29 17:37:36
 @@ -256,7 +256,7 @@
          /// # Examples
          ///
@@ -764,8 +779,9 @@
          /// # {
          /// use tokio::runtime::Handle;
          ///
---- a/src/runtime/mod.rs
-+++ b/src/runtime/mod.rs
+diff -ruN a/src/runtime/mod.rs b/src/runtime/mod.rs
+--- a/src/runtime/mod.rs	2006-07-24 03:21:28
++++ b/src/runtime/mod.rs	2026-10-29 17:37:36
 @@ -65,7 +65,7 @@
  //! used.
  //!
@@ -784,16 +800,16 @@
  //! # {
  //! use tokio::net::TcpListener;
  //! use tokio::io::{AsyncReadExt, AsyncWriteExt};
-@@ -170,7 +170,7 @@
- //! for most applications. The multi-thread scheduler requires the `rt-multi-thread`
- //! feature flag, and is selected by default:
+@@ -172,7 +172,7 @@
+ //! scheduler requires the `rt-multi-thread` feature flag, and is selected by
+ //! default:
  //! ```
 -//! # #[cfg(not(target_family = "wasm"))]
 +//! # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
  //! # {
  //! use tokio::runtime;
  //!
-@@ -410,7 +410,7 @@
+@@ -412,7 +412,7 @@
  
  // At the top due to macros
  #[cfg(test)]
@@ -802,18 +818,19 @@
  #[macro_use]
  mod tests;
  
-@@ -581,7 +581,7 @@
-         /// # Examples
-         ///
-         /// ```
--        /// # #[cfg(not(target_family = "wasm"))]
-+        /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
-         /// # {
-         /// #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
-         /// async fn main() {
---- a/src/runtime/park.rs
-+++ b/src/runtime/park.rs
-@@ -153,14 +153,14 @@
+@@ -589,7 +589,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
+     /// async fn main() {
+diff -ruN a/src/runtime/park.rs b/src/runtime/park.rs
+--- a/src/runtime/park.rs	2006-07-24 03:21:28
++++ b/src/runtime/park.rs	2026-10-29 17:37:36
+@@ -223,14 +223,14 @@
              Err(actual) => panic!("inconsistent park_timeout state; actual = {actual}"),
          }
  
@@ -830,9 +847,10 @@
          // Wasm without atomics doesn't have threads, so just sleep.
          {
              let _m = m;
---- a/src/runtime/runtime.rs
-+++ b/src/runtime/runtime.rs
-@@ -186,7 +186,7 @@
+diff -ruN a/src/runtime/runtime.rs b/src/runtime/runtime.rs
+--- a/src/runtime/runtime.rs	2006-07-24 03:21:28
++++ b/src/runtime/runtime.rs	2026-10-29 17:37:36
+@@ -191,7 +191,7 @@
      /// # Examples
      ///
      /// ```
@@ -841,7 +859,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      ///
-@@ -220,7 +220,7 @@
+@@ -225,7 +225,7 @@
      /// # Examples
      ///
      /// ```
@@ -850,7 +868,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      ///
-@@ -256,7 +256,7 @@
+@@ -261,7 +261,7 @@
      /// # Examples
      ///
      /// ```
@@ -859,7 +877,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      ///
-@@ -321,7 +321,7 @@
+@@ -326,7 +326,7 @@
      /// # Examples
      ///
      /// ```no_run
@@ -868,7 +886,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      ///
-@@ -390,7 +390,7 @@
+@@ -395,7 +395,7 @@
      /// # Example
      ///
      /// ```
@@ -877,7 +895,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      /// use tokio::task::JoinHandle;
-@@ -428,7 +428,7 @@
+@@ -433,7 +433,7 @@
      /// # Examples
      ///
      /// ```
@@ -886,7 +904,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      /// use tokio::task;
-@@ -471,7 +471,7 @@
+@@ -476,7 +476,7 @@
      /// This function is equivalent to calling `shutdown_timeout(Duration::from_nanos(0))`.
      ///
      /// ```
@@ -895,7 +913,7 @@
      /// # {
      /// use tokio::runtime::Runtime;
      ///
-@@ -554,7 +554,7 @@
+@@ -559,7 +559,7 @@
  /// # Examples
  ///
  /// ```
@@ -904,8 +922,9 @@
  /// # {
  /// use tokio::runtime::Runtime;
  /// use tokio::net::TcpListener;
---- a/src/runtime/scheduler/inject/synced.rs
-+++ b/src/runtime/scheduler/inject/synced.rs
+diff -ruN a/src/runtime/scheduler/inject/synced.rs b/src/runtime/scheduler/inject/synced.rs
+--- a/src/runtime/scheduler/inject/synced.rs	2006-07-24 03:21:28
++++ b/src/runtime/scheduler/inject/synced.rs	2026-10-29 17:37:36
 @@ -1,5 +1,5 @@
  #![cfg_attr(
 -    any(not(all(tokio_unstable, feature = "full")), target_family = "wasm"),
@@ -913,8 +932,9 @@
      allow(dead_code)
  )]
  
---- a/src/runtime/task/error.rs
-+++ b/src/runtime/task/error.rs
+diff -ruN a/src/runtime/task/error.rs b/src/runtime/task/error.rs
+--- a/src/runtime/task/error.rs	2006-07-24 03:21:28
++++ b/src/runtime/task/error.rs	2026-10-29 17:37:36
 @@ -46,7 +46,7 @@
      /// # Examples
      ///
@@ -924,8 +944,9 @@
      /// # {
      /// use std::panic;
      ///
---- a/src/runtime/task/join.rs
-+++ b/src/runtime/task/join.rs
+diff -ruN a/src/runtime/task/join.rs b/src/runtime/task/join.rs
+--- a/src/runtime/task/join.rs	2006-07-24 03:21:28
++++ b/src/runtime/task/join.rs	2026-10-29 17:37:36
 @@ -110,7 +110,7 @@
      /// If the task panics, the error is a [`JoinError`] that contains the panic:
      ///
@@ -935,9 +956,10 @@
      /// # {
      /// use tokio::task;
      /// use std::io;
---- a/src/runtime/task/mod.rs
-+++ b/src/runtime/task/mod.rs
-@@ -532,7 +532,7 @@
+diff -ruN a/src/runtime/task/mod.rs b/src/runtime/task/mod.rs
+--- a/src/runtime/task/mod.rs	2006-07-24 03:21:28
++++ b/src/runtime/task/mod.rs	2026-10-29 17:37:36
+@@ -527,7 +527,7 @@
  impl<S: Schedule> UnownedTask<S> {
      // Used in test of the inject queue.
      #[cfg(test)]
@@ -946,9 +968,10 @@
      pub(super) fn into_notified(self) -> Notified<S> {
          Notified(self.into_task())
      }
---- a/src/sync/broadcast.rs
-+++ b/src/sync/broadcast.rs
-@@ -1560,7 +1560,7 @@
+diff -ruN a/src/sync/broadcast.rs b/src/sync/broadcast.rs
+--- a/src/sync/broadcast.rs	2006-07-24 03:21:28
++++ b/src/sync/broadcast.rs	2026-10-29 17:37:36
+@@ -1559,7 +1559,7 @@
      ///
      /// # Examples
      /// ```
@@ -957,8 +980,9 @@
      /// # {
      /// use std::thread;
      /// use tokio::sync::broadcast;
---- a/src/sync/mod.rs
-+++ b/src/sync/mod.rs
+diff -ruN a/src/sync/mod.rs b/src/sync/mod.rs
+--- a/src/sync/mod.rs	2006-07-24 03:21:28
++++ b/src/sync/mod.rs	2026-10-29 17:37:36
 @@ -141,7 +141,7 @@
  //! passing.
  //!
@@ -968,8 +992,9 @@
  //! # {
  //! use tokio::io::{self, AsyncWriteExt};
  //! use tokio::net::TcpStream;
---- a/src/sync/mpsc/bounded.rs
-+++ b/src/sync/mpsc/bounded.rs
+diff -ruN a/src/sync/mpsc/bounded.rs b/src/sync/mpsc/bounded.rs
+--- a/src/sync/mpsc/bounded.rs	2006-07-24 03:21:28
++++ b/src/sync/mpsc/bounded.rs	2026-10-29 17:37:36
 @@ -396,7 +396,7 @@
      /// # Examples
      ///
@@ -988,9 +1013,27 @@
      /// # {
      /// use std::thread;
      /// use tokio::runtime::Runtime;
---- a/src/sync/mpsc/unbounded.rs
-+++ b/src/sync/mpsc/unbounded.rs
-@@ -297,7 +297,7 @@
+diff -ruN a/src/sync/mpsc/list.rs b/src/sync/mpsc/list.rs
+--- a/src/sync/mpsc/list.rs	2006-07-24 03:21:28
++++ b/src/sync/mpsc/list.rs	2026-10-29 17:37:36
+@@ -467,11 +467,11 @@
+     use crate::sync::mpsc::unbounded::unbounded_channel_from_index;
+     use crate::sync::mpsc::BLOCK_CAP;
+ 
+-    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
++    #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown"))]
+     use wasm_bindgen_test::wasm_bindgen_test as test;
+ 
+     #[test]
+-    #[cfg(not(target_family = "wasm"))]
++    #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     fn wraparound() {
+         use super::*;
+ 
+diff -ruN a/src/sync/mpsc/unbounded.rs b/src/sync/mpsc/unbounded.rs
+--- a/src/sync/mpsc/unbounded.rs	2006-07-24 03:21:28
++++ b/src/sync/mpsc/unbounded.rs	2026-10-29 17:37:36
+@@ -309,7 +309,7 @@
      /// # Examples
      ///
      /// ```
@@ -999,7 +1042,7 @@
      /// # {
      /// use std::thread;
      /// use tokio::sync::mpsc;
-@@ -458,7 +458,7 @@
+@@ -470,7 +470,7 @@
      /// # Examples
      ///
      /// ```
@@ -1008,8 +1051,9 @@
      /// # {
      /// use std::task::{Context, Poll};
      /// use std::pin::Pin;
---- a/src/sync/mutex.rs
-+++ b/src/sync/mutex.rs
+diff -ruN a/src/sync/mutex.rs b/src/sync/mutex.rs
+--- a/src/sync/mutex.rs	2006-07-24 03:21:28
++++ b/src/sync/mutex.rs	2026-10-29 17:37:36
 @@ -484,7 +484,7 @@
      /// # Examples
      ///
@@ -1028,8 +1072,9 @@
      /// # {
      /// use std::sync::Arc;
      /// use tokio::sync::Mutex;
---- a/src/sync/oneshot.rs
-+++ b/src/sync/oneshot.rs
+diff -ruN a/src/sync/oneshot.rs b/src/sync/oneshot.rs
+--- a/src/sync/oneshot.rs	2006-07-24 03:21:28
++++ b/src/sync/oneshot.rs	2026-10-29 17:37:36
 @@ -1216,7 +1216,7 @@
      /// # Examples
      ///
@@ -1039,8 +1084,9 @@
      /// # {
      /// use std::thread;
      /// use tokio::sync::oneshot;
---- a/src/sync/rwlock.rs
-+++ b/src/sync/rwlock.rs
+diff -ruN a/src/sync/rwlock.rs b/src/sync/rwlock.rs
+--- a/src/sync/rwlock.rs	2006-07-24 03:21:28
++++ b/src/sync/rwlock.rs	2026-10-29 17:37:36
 @@ -494,7 +494,7 @@
      /// # Examples
      ///
@@ -1059,8 +1105,9 @@
      /// # {
      /// use std::sync::Arc;
      /// use tokio::{sync::RwLock};
---- a/src/sync/semaphore.rs
-+++ b/src/sync/semaphore.rs
+diff -ruN a/src/sync/semaphore.rs b/src/sync/semaphore.rs
+--- a/src/sync/semaphore.rs	2006-07-24 03:21:28
++++ b/src/sync/semaphore.rs	2026-10-29 17:37:36
 @@ -90,7 +90,7 @@
  /// file, the program will wait until a permit becomes available before
  /// proceeding to open another file.
@@ -1079,14 +1126,24 @@
  /// # {
  /// use std::sync::Arc;
  /// use tokio::sync::Semaphore;
---- a/src/sync/tests/atomic_waker.rs
-+++ b/src/sync/tests/atomic_waker.rs
+@@ -770,7 +770,7 @@
+     /// # Examples
+     ///
+     /// ```
+-    /// # #[cfg(not(target_family = "wasm"))]
++    /// # #[cfg(not(all(target_family = "wasm", not(target_os = "kandelo"))))]
+     /// # {
+     /// use std::sync::Arc;
+     /// use tokio::sync::Semaphore;
+diff -ruN a/src/sync/tests/atomic_waker.rs b/src/sync/tests/atomic_waker.rs
+--- a/src/sync/tests/atomic_waker.rs	2006-07-24 03:21:28
++++ b/src/sync/tests/atomic_waker.rs	2026-10-29 17:37:36
 @@ -15,7 +15,7 @@
  impl AssertSend for Waker {}
  impl AssertSync for Waker {}
  
--#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
-+#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
++#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown"))]
  use wasm_bindgen_test::wasm_bindgen_test as test;
  
  #[test]
@@ -1108,14 +1165,15 @@
  fn atomic_waker_panic_safe() {
      use std::panic;
      use std::ptr;
---- a/src/sync/tests/notify.rs
-+++ b/src/sync/tests/notify.rs
+diff -ruN a/src/sync/tests/notify.rs b/src/sync/tests/notify.rs
+--- a/src/sync/tests/notify.rs	2006-07-24 03:21:28
++++ b/src/sync/tests/notify.rs	2026-10-29 17:37:36
 @@ -3,7 +3,7 @@
  use std::sync::Arc;
  use std::task::{Context, RawWaker, RawWakerVTable, Waker};
  
--#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
-+#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
++#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown"))]
  use wasm_bindgen_test::wasm_bindgen_test as test;
  
  #[test]
@@ -1128,14 +1186,15 @@
  fn watch_test() {
      let rt = crate::runtime::Builder::new_current_thread()
          .build()
---- a/src/sync/tests/semaphore_batch.rs
-+++ b/src/sync/tests/semaphore_batch.rs
+diff -ruN a/src/sync/tests/semaphore_batch.rs b/src/sync/tests/semaphore_batch.rs
+--- a/src/sync/tests/semaphore_batch.rs	2006-07-24 03:21:28
++++ b/src/sync/tests/semaphore_batch.rs	2026-10-29 17:37:36
 @@ -3,7 +3,7 @@
  
  const MAX_PERMITS: usize = crate::sync::Semaphore::MAX_PERMITS;
  
--#[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
-+#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
++#[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown"))]
  use wasm_bindgen_test::wasm_bindgen_test as test;
  
  #[test]
@@ -1148,19 +1207,21 @@
  fn validates_max_permits() {
      Semaphore::new(MAX_PERMITS + 1);
  }
---- a/src/task/coop/mod.rs
-+++ b/src/task/coop/mod.rs
-@@ -496,7 +496,7 @@
+diff -ruN a/src/task/coop/mod.rs b/src/task/coop/mod.rs
+--- a/src/task/coop/mod.rs	2006-07-24 03:21:28
++++ b/src/task/coop/mod.rs	2026-10-29 17:37:36
+@@ -497,7 +497,7 @@
  mod test {
      use super::*;
  
--    #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
-+    #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), not(target_os = "wasi")))]
+-    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
++    #[cfg(all(all(target_family = "wasm", not(target_os = "kandelo")), target_os = "unknown"))]
      use wasm_bindgen_test::wasm_bindgen_test as test;
  
      fn get() -> Budget {
---- a/src/task/join_set.rs
-+++ b/src/task/join_set.rs
+diff -ruN a/src/task/join_set.rs b/src/task/join_set.rs
+--- a/src/task/join_set.rs	2006-07-24 03:21:28
++++ b/src/task/join_set.rs	2026-10-29 17:37:36
 @@ -220,7 +220,7 @@
      /// Spawn multiple blocking tasks and wait for them.
      ///
@@ -1179,8 +1240,9 @@
  /// # {
  /// use tokio::task::JoinSet;
  ///
---- a/src/task/local.rs
-+++ b/src/task/local.rs
+diff -ruN a/src/task/local.rs b/src/task/local.rs
+--- a/src/task/local.rs	2006-07-24 03:21:28
++++ b/src/task/local.rs	2026-10-29 17:37:36
 @@ -132,7 +132,7 @@
      ///
      /// The following example puts the `LocalSet` inside a new thread.
@@ -1190,7 +1252,7 @@
      /// # {
      /// use tokio::runtime::Builder;
      /// use tokio::sync::{mpsc, oneshot};
-@@ -644,7 +644,7 @@
+@@ -643,7 +643,7 @@
      /// ```
      /// This, however, will not panic:
      /// ```
@@ -1199,8 +1261,9 @@
      /// # {
      /// use tokio::runtime::Runtime;
      /// use tokio::task;
---- a/src/task/mod.rs
-+++ b/src/task/mod.rs
+diff -ruN a/src/task/mod.rs b/src/task/mod.rs
+--- a/src/task/mod.rs	2006-07-24 03:21:28
++++ b/src/task/mod.rs	2026-10-29 17:37:36
 @@ -91,7 +91,7 @@
  //! example:
  //!
@@ -1219,8 +1282,9 @@
  //! # {
  //! use tokio::task;
  //!
---- a/src/task/spawn.rs
-+++ b/src/task/spawn.rs
+diff -ruN a/src/task/spawn.rs b/src/task/spawn.rs
+--- a/src/task/spawn.rs	2006-07-24 03:21:28
++++ b/src/task/spawn.rs	2026-10-29 17:37:36
 @@ -40,7 +40,7 @@
      /// that processes each received connection.
      ///

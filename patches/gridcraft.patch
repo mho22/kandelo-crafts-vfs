@@ -1,0 +1,703 @@
+# gridcraft 0.13.0: target_arch = "wasm32" means the browser build
+# (apps/gridcraft-web) here; Kandelo takes the native paths (files opened
+# by path, rfd, arboard). Every such cfg reads
+# all(target_arch = "wasm32", not(target_os = "kandelo")). Kandelo has no
+# X server, so the app asks eframe and winit for Wayland only there, and
+# never switches to X11 when DISPLAY is set. arboard takes its Wayland
+# clipboard on Kandelo too.
+# The workspace [patch] also names four egui crates Cargo.lock does not
+# use; vendoring skips them and an offline build stops on them.
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2026-10-28 16:52:04
++++ b/Cargo.toml	2026-10-30 13:25:19
+@@ -98,10 +98,6 @@
+ egui-winit = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ egui_glow = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_extras = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ eframe = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+-egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+ winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
+diff -ruN a/apps/gridcraft/Cargo.toml b/apps/gridcraft/Cargo.toml
+--- a/apps/gridcraft/Cargo.toml	2026-10-28 16:52:04
++++ b/apps/gridcraft/Cargo.toml	2026-10-30 13:25:19
+@@ -13,7 +13,7 @@
+ [dependencies]
+ gridcraft-engine = { workspace = true }
+ gridcraft-ui-egui = { workspace = true }
+-eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11", "clipboard"] }
++eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "clipboard"] }
+ egui = { workspace = true }
+ serde_json = { workspace = true }
+ log = { workspace = true }
+@@ -24,10 +24,14 @@
+ # Icon + VERSIONINFO for gridcraft.exe; build.rs only uses it when the target is Windows.
+ winresource = "0.1"
+ 
+-[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
++[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "kandelo"))))'.dependencies]
+ winit = { version = "0.30", default-features = false, features = ["x11"] }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++# Kandelo has no X server: Wayland only.
++[target.'cfg(not(target_os = "kandelo"))'.dependencies]
++eframe = { workspace = true, features = ["x11"] }
++
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ # Same craft-libs revision as the workspace's craft-update and craft-window (see the root
+ # Cargo.toml).
+ craft-print = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+@@ -38,7 +42,7 @@
+ # The control channel's token (OS random numbers); already in the tree.
+ getrandom = "0.4"
+ 
+-[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
++[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "kandelo"))'.dependencies]
+ arboard = { workspace = true, features = ["wayland-data-control"] }
+ 
+ [target.'cfg(target_os = "windows")'.dependencies]
+diff -ruN a/apps/gridcraft/src/main.rs b/apps/gridcraft/src/main.rs
+--- a/apps/gridcraft/src/main.rs	2026-10-28 16:52:04
++++ b/apps/gridcraft/src/main.rs	2026-10-30 13:25:19
+@@ -340,12 +340,12 @@
+     }
+     let window_builder = viewport.clone();
+     let options = eframe::NativeOptions { viewport, ..Default::default() };
+-    #[cfg(all(unix, not(target_os = "macos")))]
++    #[cfg(all(unix, not(any(target_os = "macos", target_os = "kandelo"))))]
+     let mut options = options;
+     // winit has no file drag-and-drop on Wayland (only on X11), so dropping files from the file
+     // manager showed a "no" cursor. Run through XWayland when it's there; GRIDCRAFT_WAYLAND=1
+     // keeps the native Wayland backend.
+-    #[cfg(all(unix, not(target_os = "macos")))]
++    #[cfg(all(unix, not(any(target_os = "macos", target_os = "kandelo"))))]
+     if std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()) && std::env::var_os("GRIDCRAFT_WAYLAND").is_none() {
+         options.event_loop_builder = Some(Box::new(|b| {
+             use winit::platform::x11::EventLoopBuilderExtX11;
+diff -ruN a/crates/core/Cargo.toml b/crates/core/Cargo.toml
+--- a/crates/core/Cargo.toml	2026-10-28 16:52:04
++++ b/crates/core/Cargo.toml	2026-10-30 13:25:19
+@@ -13,7 +13,7 @@
+ thiserror = { workspace = true }
+ chrono = { workspace = true }
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies]
+ js-sys = "0.3"
+ 
+ [dev-dependencies]
+diff -ruN a/crates/core/src/date.rs b/crates/core/src/date.rs
+--- a/crates/core/src/date.rs	2026-10-28 16:52:04
++++ b/crates/core/src/date.rs	2026-10-30 13:25:19
+@@ -49,11 +49,11 @@
+ /// Milliseconds since the Unix epoch (UTC) from the system clock; `None` when the clock is unavailable.
+ /// Chrono uses the browser clock on wasm32, where the standard library clock methods trap.
+ pub fn unix_now_ms() -> Option<f64> {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         Some(chrono::Utc::now().timestamp_millis() as f64)
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         Some(js_sys::Date::now())
+     }
+diff -ruN a/crates/engine/src/cmd/spelling.rs b/crates/engine/src/cmd/spelling.rs
+--- a/crates/engine/src/cmd/spelling.rs	2026-10-28 16:52:04
++++ b/crates/engine/src/cmd/spelling.rs	2026-10-30 13:25:19
+@@ -21,11 +21,11 @@
+ fn dictionary() -> &'static HashSet<String> {
+     static DICT: OnceLock<HashSet<String>> = OnceLock::new();
+     DICT.get_or_init(|| {
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         {
+             HashSet::new()
+         }
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             let mut set = HashSet::new();
+             for path in ["/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"] {
+diff -ruN a/crates/engine/src/cmd.rs b/crates/engine/src/cmd.rs
+--- a/crates/engine/src/cmd.rs	2026-10-28 16:52:04
++++ b/crates/engine/src/cmd.rs	2026-10-30 13:25:19
+@@ -355,7 +355,7 @@
+ pub(crate) fn commit<R>(d: &mut DocState, f: impl FnOnce(&mut Ctx) -> Result<R>) -> Result<R> {
+     // `GRIDCRAFT_PROFILE` timing, never on wasm where the clock traps. `elapsed` on the epoch
+     // reads the wall clock without the (disallowed) `now`.
+-    let t0 = if cfg!(target_arch = "wasm32") { None } else { std::env::var_os("GRIDCRAFT_PROFILE").map(|_| wall_clock()) };
++    let t0 = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) { None } else { std::env::var_os("GRIDCRAFT_PROFILE").map(|_| wall_clock()) };
+     let since = |t0: std::time::Duration| wall_clock().saturating_sub(t0);
+     let mut sel = d.selection.clone();
+     let mut ctx = Ctx { wb: (*d.wb).clone(), changed: Vec::new(), structural: false, sel: &mut sel, fit_rows: Vec::new(), protection_checked: false };
+diff -ruN a/crates/engine/src/io.rs b/crates/engine/src/io.rs
+--- a/crates/engine/src/io.rs	2026-10-28 16:52:04
++++ b/crates/engine/src/io.rs	2026-10-30 13:25:19
+@@ -606,10 +606,10 @@
+ 
+ /// The largest native file the reader still touches: its own cap plus one, used to stop
+ /// reads whose bytes arrive faster than metadata can claim (device files, growing files).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_READ_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn read_file(path: &str) -> Result<Vec<u8>> {
+     use std::io::Read;
+     script_sandbox_check(path)?;
+@@ -628,13 +628,13 @@
+     Ok(buf)
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub fn read_file(path: &str) -> Result<Vec<u8>> {
+     script_sandbox_check(path)?;
+     Err(EngineError::Other(format!("{path}: no file system in the browser")))
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
+     use std::io::Write;
+     script_sandbox_check(path)?;
+@@ -672,7 +672,7 @@
+     })
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub fn write_file(path: &str, _bytes: &[u8]) -> Result<()> {
+     script_sandbox_check(path)?;
+     Err(EngineError::Other(format!("{path}: no file system in the browser")))
+diff -ruN a/crates/ui-egui/Cargo.toml b/crates/ui-egui/Cargo.toml
+--- a/crates/ui-egui/Cargo.toml	2026-10-28 16:52:04
++++ b/crates/ui-egui/Cargo.toml	2026-10-30 13:25:19
+@@ -36,13 +36,13 @@
+ epaint_default_fonts = { workspace = true }
+ gridcraft-xlsx = { workspace = true, features = ["test-support"] }
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dependencies]
+ craft-update = { workspace = true }
+ # The desktop's preferred language for the first-run interface language.
+ sys-locale = { workspace = true }
+ craft-window = { workspace = true }
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies]
++[target.'cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))'.dependencies]
+ # Read the browser's preferred language for the first-run web interface language.
+ web-sys = { version = "0.3", features = ["Window", "Navigator", "Performance"] }
+ 
+diff -ruN a/crates/ui-egui/src/app/prefs.rs b/crates/ui-egui/src/app/prefs.rs
+--- a/crates/ui-egui/src/app/prefs.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/app/prefs.rs	2026-10-30 13:25:19
+@@ -1,4 +1,4 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::updates_ui;
+ use super::{SheetApp, desktop_theme};
+ 
+@@ -51,15 +51,15 @@
+     /// Look for a newer release once, in the background, as the desktop app starts (a no-op on the
+     /// web). A found release opens the update prompt; nothing is shown when GridCraft is current.
+     pub fn start_update_check(&mut self) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         updates_ui::start(self, false);
+     }
+ 
+     /// Help ▸ Check for Updates…: look now, and say so when GridCraft is up to date or the check fails.
+     pub fn check_for_updates(&mut self) {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         updates_ui::start(self, true);
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         {
+             self.message = Some(("GridCraft".into(), "The web version is always the latest release.".into()));
+         }
+diff -ruN a/crates/ui-egui/src/app.rs b/crates/ui-egui/src/app.rs
+--- a/crates/ui-egui/src/app.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/app.rs	2026-10-30 13:25:19
+@@ -3,7 +3,7 @@
+ use super::clock::now_ms;
+ use super::services::{Chrome, Services};
+ use super::state::{NoticeKind, OpenWindow, SaveAnswer, SheetView};
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::updates_ui;
+ use super::{
+     CellRef, HashMap, INTERFACE_SCALE_MAX, INTERFACE_SCALE_MIN, Json, Notice, Perf, RangeRef, Session, SheetApp, UiRequest, UiState, backstage,
+@@ -79,7 +79,7 @@
+             parked: HashMap::new(),
+             native_windows: false,
+             arrange_windows: None,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+             updates_rt: Default::default(),
+         }
+     }
+@@ -130,7 +130,7 @@
+         // frames still see worker completion. `ui` and the desktop app no longer poll it.
+         self.poll_printing(ctx);
+         self.guard_window_close(ctx);
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         updates_ui::tick(self, ctx);
+         // Files read asynchronously (web file picker, dropped files).
+         self.poll_async_opens();
+@@ -175,7 +175,7 @@
+         // The web runner has no `RequestPaintWhileHidden`; sending it there only logs an
+         // unhandled command. A visible tab still gets the repaint below; a hidden tab keeps the
+         // work queued (see the shared eframe follow-up in docs/egui-037-local-followups.md).
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaintWhileHidden);
+         ctx.request_repaint();
+     }
+@@ -199,7 +199,7 @@
+         }
+         // The language the widgets translate with this frame (see `i18n::current`).
+         i18n::set_current(&ctx, self.ui.language);
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         updates_ui::show(self, &ctx);
+         let t = theme::Tokens::get(&ctx);
+         // A host can turn the File tab off while Backstage is already open: close it.
+diff -ruN a/crates/ui-egui/src/backstage/options.rs b/crates/ui-egui/src/backstage/options.rs
+--- a/crates/ui-egui/src/backstage/options.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/backstage/options.rs	2026-10-30 13:25:19
+@@ -171,7 +171,7 @@
+         "freebsd" => "FreeBSD",
+         "openbsd" => "OpenBSD",
+         "netbsd" => "NetBSD",
+-        _ if cfg!(target_arch = "wasm32") => return "Web".into(),
++        _ if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) => return "Web".into(),
+         other => other,
+     };
+     format!("{os} ({})", std::env::consts::ARCH)
+diff -ruN a/crates/ui-egui/src/backstage.rs b/crates/ui-egui/src/backstage.rs
+--- a/crates/ui-egui/src/backstage.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/backstage.rs	2026-10-30 13:25:19
+@@ -380,7 +380,7 @@
+     // What the file system has said so far; the rest arrives in later frames (see `RecentFiles`).
+     let known = bs.recent.known(ui.ctx(), &app.ui.recent);
+     // The web build has no files to ask about, and a narrow window leaves the names their room.
+-    let modified_w = if cfg!(target_arch = "wasm32") || width < 420.0 { 0.0 } else { MODIFIED_W };
++    let modified_w = if cfg!(all(target_arch = "wasm32", not(target_os = "kandelo"))) || width < 420.0 { 0.0 } else { MODIFIED_W };
+     if modified_w > 0.0 {
+         let (head, _) = ui.allocate_exact_size(vec2(width, 20.0), Sense::hover());
+         ui.painter().text(
+@@ -463,7 +463,7 @@
+ }
+ 
+ /// Starts the thread that asks. Returns whether it started.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn ask(ctx: egui::Context, paths: Vec<String>, found: Arc<Mutex<HashMap<String, Modified>>>) -> bool {
+     /// Lets the next list ask, however the thread ends.
+     struct Done;
+@@ -485,7 +485,7 @@
+ }
+ 
+ /// The web build has no file system to ask.
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ fn ask(_ctx: egui::Context, _paths: Vec<String>, _found: Arc<Mutex<HashMap<String, Modified>>>) -> bool {
+     false
+ }
+diff -ruN a/crates/ui-egui/src/clock.rs b/crates/ui-egui/src/clock.rs
+--- a/crates/ui-egui/src/clock.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/clock.rs	2026-10-30 13:25:19
+@@ -10,7 +10,7 @@
+ /// Deliberately separate from [`now_ms`]: a wall-clock adjustment must not extend (or expire) a
+ /// screenshot deadline or save a workbook twice. Native uses [`std::time::Instant`]; wasm uses the
+ /// browser's `performance.now()`, which is monotonic too.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[allow(clippy::disallowed_methods)] // the std clock is read only off wasm
+ pub fn monotonic_ms() -> f64 {
+     use std::sync::OnceLock;
+@@ -18,7 +18,7 @@
+     START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ /// Web monotonic clock: the browser's `performance.now()`, or 0 when it is unavailable.
+ pub fn monotonic_ms() -> f64 {
+     web_sys::window().and_then(|window| window.performance()).map_or(0.0, |performance| performance.now())
+diff -ruN a/crates/ui-egui/src/fonts.rs b/crates/ui-egui/src/fonts.rs
+--- a/crates/ui-egui/src/fonts.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/fonts.rs	2026-10-30 13:25:19
+@@ -16,11 +16,11 @@
+ 
+ /// A font file is skipped by the scan past this size: a catalog only needs each face's name, and a
+ /// damaged or enormous file must not turn startup into a long read.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_FONT_FILE: u64 = 64 << 20;
+ 
+ /// A face keeps at most this many family names, so a hostile `name` table can't grow the catalog.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const MAX_FAMILY_NAMES: usize = 16;
+ 
+ /// One face of one installed font file.
+@@ -45,11 +45,11 @@
+ 
+ /// The font folders of the platform (the system's and the user's). Empty on wasm.
+ pub fn system_font_dirs() -> Vec<PathBuf> {
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         Vec::new()
+     }
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         let mut dirs: Vec<PathBuf> = Vec::new();
+         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from);
+@@ -76,7 +76,7 @@
+ }
+ 
+ /// Weight implied by a style name (`"Bold"` → 700, `"Light"` → 300).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn style_weight(style: &str) -> f32 {
+     let s: String = style.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect();
+     const TABLE: &[(&str, f32)] = &[
+@@ -105,7 +105,7 @@
+ }
+ 
+ /// Whether a style name reads as italic or oblique.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn style_italic(style: &str) -> bool {
+     let s: String = style.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect();
+     s.contains("italic") || s.contains("oblique")
+@@ -113,7 +113,7 @@
+ 
+ /// Every face in `data` as `(index, family, names, style)`, where `names` holds every family name
+ /// (see [`Face::names`]). Damaged data yields nothing, never a panic.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn file_faces(data: &[u8]) -> Vec<(u32, String, Vec<String>, String)> {
+     use skrifa::raw::FileRef;
+     use skrifa::{MetadataProvider, string::StringId};
+@@ -148,7 +148,7 @@
+ 
+ /// Catalog every face under `dirs`, recursing into subfolders. A folder reached twice (through a
+ /// symlink) is read once, so a link back to a parent ends the walk.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub fn scan_dirs(dirs: &[PathBuf]) -> Vec<Face> {
+     let mut out: Vec<Face> = Vec::new();
+     let mut stack: Vec<PathBuf> = dirs.to_vec();
+@@ -181,7 +181,7 @@
+     out
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub fn scan_dirs(_dirs: &[PathBuf]) -> Vec<Face> {
+     Vec::new()
+ }
+@@ -203,7 +203,7 @@
+ pub fn start_scan() {
+     static STARTED: OnceLock<()> = OnceLock::new();
+     STARTED.get_or_init(|| {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         if CATALOG.get().is_none() {
+             // A failed spawn leaves the scan to the first blocking lookup.
+             let _ = std::thread::Builder::new().name("font-scan".into()).spawn(|| {
+diff -ruN a/crates/ui-egui/src/i18n.rs b/crates/ui-egui/src/i18n.rs
+--- a/crates/ui-egui/src/i18n.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/i18n.rs	2026-10-30 13:25:19
+@@ -175,11 +175,11 @@
+     /// The system's preferred interface language, best effort; English when it is unknown or
+     /// unsupported. Used as the first-run default while nothing is saved.
+     pub fn system() -> Self {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+         {
+             sys_locale::get_locale().and_then(|tag| Self::from_tag(&tag)).unwrap_or(Self::En)
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+         {
+             web_sys::window().and_then(|window| window.navigator().language()).and_then(|tag| Self::from_tag(&tag)).unwrap_or(Self::En)
+         }
+diff -ruN a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+--- a/crates/ui-egui/src/lib.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/lib.rs	2026-10-30 13:25:19
+@@ -15,7 +15,7 @@
+ mod craft_fonts_policy;
+ pub mod credits;
+ pub mod dialogs;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub mod doc_windows;
+ pub mod editor;
+ mod floating_pictures;
+@@ -37,7 +37,7 @@
+ pub mod tabs;
+ pub mod text_box;
+ pub mod theme;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ mod updates_ui;
+ pub mod widgets;
+ mod window_ui;
+@@ -285,7 +285,7 @@
+     /// View › Arrange All's layout and windows, waiting for the native windows to move.
+     pub arrange_windows: Option<(String, Vec<u64>)>,
+     /// The update check, the startup prompt and a running self-update (desktop only).
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     updates_rt: updates_ui::Runtime,
+ }
+ 
+diff -ruN a/crates/ui-egui/src/theme/font_fallback.rs b/crates/ui-egui/src/theme/font_fallback.rs
+--- a/crates/ui-egui/src/theme/font_fallback.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/theme/font_fallback.rs	2026-10-30 13:25:19
+@@ -1,8 +1,8 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::Arc;
+ use super::FontDefinitions;
+ use super::font_setup::HanOrder;
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::font_setup::{in_dirs, try_load};
+ 
+ /// Loads the system non-Latin fallback faces (one file per script family) and returns their keys so
+@@ -10,7 +10,7 @@
+ /// without this a Thai, Hebrew, Japanese or Chinese workbook shows tofu boxes even though the text
+ /// was read correctly. With a face installed those scripts get real glyphs instead of tofu; nothing
+ /// is bundled, and a machine without the face keeps the old behaviour.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn load_fallback(fonts: &mut FontDefinitions, han: HanOrder) -> Vec<String> {
+     let mut keys = Vec::new();
+     // Files already loaded as a fallback face. A file serves at most one key: the region-merged
+@@ -33,7 +33,7 @@
+     keys
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(super) fn load_fallback(_fonts: &mut FontDefinitions, _han: HanOrder) -> Vec<String> {
+     Vec::new()
+ }
+@@ -42,7 +42,7 @@
+ /// family is enough — epaint picks the first face with the glyph, and a script's glyphs live in one
+ /// file. Order only matters between faces that both cover a glyph (Japanese vs Chinese kanji), so
+ /// the interface language reorders the two Han entries and nothing else.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn fallback_faces(han: HanOrder) -> Vec<(&'static str, Vec<(String, u32)>)> {
+     let ja = ("sys-cjk-han-ja", cjk_han_japanese());
+     let zh = ("sys-cjk-han-zh", cjk_han_simplified());
+@@ -66,7 +66,7 @@
+ /// `truetype/wqy`), Fedora (`google-noto-cjk`), Arch (`noto-cjk`, `wenquanyi`), ChromeOS's Linux
+ /// container (`chromeos/notocjk`, #1762), plus local and
+ /// flat layouts. Flatpak exposes the same host layouts through read-only font mounts.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ const LINUX_CJK_DIRS: [&str; 22] = [
+     // Flatpak mounts host fonts here without a broad filesystem permission. Keep the same
+     // distribution layouts as below; /usr/share/fonts inside the sandbox belongs to the runtime.
+@@ -95,14 +95,14 @@
+ ];
+ 
+ /// The Windows fonts folder (`%WINDIR%\Fonts`, or the default install location).
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn windows_fonts() -> String {
+     std::env::var("WINDIR").map(|w| format!("{w}\\Fonts")).unwrap_or_else(|_| "C:\\Windows\\Fonts".into())
+ }
+ 
+ /// The Noto Sans CJK faces for one locale (`jp`, `sc`, `kr`): the per-locale OTF, then the
+ /// region-merged TTC at `face`, in every Linux font directory.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn noto_cjk(locale: &str, face: u32) -> Vec<(String, u32)> {
+     let mut v = Vec::new();
+     for d in LINUX_CJK_DIRS {
+@@ -117,7 +117,7 @@
+ /// The region-merged `NotoSansCJK-Regular.ttc` holds one face per locale (JP 0, KR 1, SC 2, TC 3,
+ /// HK 4) with the same glyph coverage, so the index only picks glyph shapes. Whichever Han list
+ /// comes first loads it; [`load_fallback`] does not load the same file again for the other.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn cjk_han_japanese() -> Vec<(String, u32)> {
+     let mac = "/System/Library/Fonts";
+     let win = windows_fonts();
+@@ -131,7 +131,7 @@
+ 
+ /// Simplified Chinese Han faces. Loaded apart from the Japanese ones so a glyph one family lacks
+ /// (simplified-only hanzi in a Japanese font) still falls through to a real glyph.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn cjk_han_simplified() -> Vec<(String, u32)> {
+     let mac = "/System/Library/Fonts";
+     let win = windows_fonts();
+@@ -153,7 +153,7 @@
+ 
+ /// Hangul faces (Korean). The Han faces above that come from the region-merged Noto Sans CJK file
+ /// already carry Hangul; [`load_fallback`] then skips this list rather than load the file twice.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn cjk_hangul() -> Vec<(String, u32)> {
+     let mac = "/System/Library/Fonts";
+     let win = windows_fonts();
+@@ -166,7 +166,7 @@
+ 
+ /// Thai faces. Windows ships Leelawadee UI and Tahoma/Microsoft Sans Serif (both carry Thai);
+ /// Linux font directories searched by the Thai and Hebrew faces, in priority order.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn linux_noto_dirs() -> [&'static str; 5] {
+     [
+         "/usr/share/fonts/truetype/noto",
+@@ -179,7 +179,7 @@
+ 
+ /// Faces for one script: Windows files under `WINDIR\Fonts` first, then macOS paths, then the
+ /// Noto/Linux files in every [`linux_noto_dirs`] directory, then the Fedora variable font.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn script_fonts(win: &[&str], mac: &[&str], lin_files: &[&str], variable: &str) -> Vec<(String, u32)> {
+     let w = windows_fonts();
+     let mut v: Vec<(String, u32)> = win.iter().map(|f| (format!("{w}\\{f}"), 0)).collect();
+@@ -190,7 +190,7 @@
+ }
+ 
+ /// macOS has Thonburi; Linux usually has Noto Sans Thai or Garuda.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn thai() -> Vec<(String, u32)> {
+     script_fonts(
+         // Leelawadee UI, Tahoma, Microsoft Sans Serif
+@@ -204,7 +204,7 @@
+ 
+ /// Lao faces. Windows ships Leelawadee UI (and DokChampa on older versions); macOS has Lao Sangam
+ /// MN and Lao MN; Linux usually has Noto Sans Lao or Phetsarath OT.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn lao() -> Vec<(String, u32)> {
+     let mac_sup = "/System/Library/Fonts/Supplemental";
+     let win = windows_fonts();
+@@ -225,7 +225,7 @@
+ 
+ /// Hebrew faces. Windows has David and FrankRuehl (and Tahoma/Courier New carry Hebrew); macOS has
+ /// Arial Hebrew and David; Linux usually has Noto Sans Hebrew or DejaVu Sans.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn hebrew() -> Vec<(String, u32)> {
+     script_fonts(
+         // David, FrankRuehl, Tahoma
+@@ -248,7 +248,7 @@
+ /// which then render as empty boxes (#197, #54). DejaVu Sans covers most of them; the paths cover
+ /// Debian/Ubuntu, Fedora and Arch layouts. [`load_fallback`] skips the file if Hebrew already
+ /// loaded it.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn symbols() -> Vec<(String, u32)> {
+     let win = std::env::var("WINDIR").map(|w| format!("{w}\\Fonts")).unwrap_or_else(|_| "C:\\Windows\\Fonts".into());
+     let mut v: Vec<(String, u32)> = vec![(format!("{win}\\seguisym.ttf"), 0), ("/System/Library/Fonts/Apple Symbols.ttf".into(), 0)];
+@@ -268,7 +268,7 @@
+ 
+ /// A second symbol face for what the first lacks (⌘ and other technical symbols): Noto Sans
+ /// Symbols 2 where it is installed, or Segoe UI Symbol behind Segoe UI.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn symbols_more() -> Vec<(String, u32)> {
+     let mut v: Vec<(String, u32)> = Vec::new();
+     for d in [
+@@ -287,11 +287,11 @@
+ 
+ /// Whether any symbol fallback face is installed (tests skip their glyph checks without one).
+ pub fn symbol_face_installed() -> bool {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+     {
+         symbols().iter().chain(symbols_more().iter()).any(|(p, _)| std::path::Path::new(p).exists())
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+     {
+         false
+     }
+diff -ruN a/crates/ui-egui/src/theme/font_setup.rs b/crates/ui-egui/src/theme/font_setup.rs
+--- a/crates/ui-egui/src/theme/font_setup.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/theme/font_setup.rs	2026-10-30 13:25:19
+@@ -1,4 +1,4 @@
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use super::Blob;
+ use super::font_fallback::load_fallback;
+ use super::{Arc, Color32, FontData, FontDefinitions, FontFamily, FontId};
+@@ -121,7 +121,7 @@
+ 
+ /// Loads the first candidate that exists and parses. A file that exists but can't be parsed is
+ /// skipped with a warning and the next candidate is tried.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ pub(super) fn try_load(paths: &[(&str, u32)]) -> Option<FontData> {
+     for (p, index) in paths {
+         if let Some(blob) = font_file(p, *index) {
+@@ -136,7 +136,7 @@
+ /// engine, because every one of these files is loaded by every font rebuild for as long as the
+ /// app runs. Only a file that parses is kept: a missing or broken one is looked for again next
+ /// time.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ fn font_file(path: &str, index: u32) -> Option<Blob> {
+     static FILES: std::sync::Mutex<std::collections::BTreeMap<String, Blob>> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+     let mut files = FILES.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+@@ -177,7 +177,7 @@
+ /// without a `CRAFT_FONTS_DIR` checkout at build time. The filter is repeated here so a stale
+ /// generated table can never smuggle in a barred face or a web-build face outside the allowlist.
+ pub(super) fn craft_font_faces() -> Vec<(String, &'static CraftFont)> {
+-    let wasm = cfg!(target_arch = "wasm32");
++    let wasm = cfg!(all(target_arch = "wasm32", not(target_os = "kandelo")));
+     craft_fonts::CRAFT_FONTS
+         .iter()
+         .enumerate()
+@@ -253,7 +253,7 @@
+     })
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", not(target_os = "kandelo")))]
+ pub(super) fn try_load(_paths: &[(&str, u32)]) -> Option<FontData> {
+     None
+ }
+diff -ruN a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
+--- a/crates/ui-egui/src/theme.rs	2026-10-28 16:52:04
++++ b/crates/ui-egui/src/theme.rs	2026-10-30 13:25:19
+@@ -16,7 +16,7 @@
+ 
+ use std::sync::Arc;
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ use egui::epaint::text::Blob;
+ use egui::{Color32, FontData, FontDefinitions, FontFamily, FontId, Stroke, Visuals};
+ 
+@@ -403,5 +403,5 @@
+     }
+ }
+ 
+-#[cfg(all(test, not(target_arch = "wasm32")))]
++#[cfg(all(test, not(all(target_arch = "wasm32", not(target_os = "kandelo")))))]
+ mod tests;

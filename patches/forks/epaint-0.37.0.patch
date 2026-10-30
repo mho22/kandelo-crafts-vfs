@@ -1,0 +1,27 @@
+# epaint 0.37.0: target_arch = "wasm32" means the browser here; Kandelo takes
+# the native path. Every such cfg reads
+# all(target_arch = "wasm32", not(target_os = "kandelo")).
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml	2026-10-29 17:52:05
++++ b/Cargo.toml	2026-10-29 17:52:34
+@@ -205,7 +205,7 @@
+ [dev-dependencies.similar-asserts]
+ version = "2.0"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.vello_cpu]
++[target.'cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))'.dev-dependencies.vello_cpu]
+ version = "0.2.0"
+ features = [
+     "std",
+diff -ruN a/src/mutex.rs b/src/mutex.rs
+--- a/src/mutex.rs	2026-10-29 17:52:05
++++ b/src/mutex.rs	2026-10-29 17:52:34
+@@ -155,7 +155,7 @@
+     }
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", not(target_os = "kandelo"))))]
+ #[cfg(test)]
+ mod tests_rwlock {
+     #![expect(clippy::disallowed_methods)] // Ok for tests
